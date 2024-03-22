@@ -13,9 +13,10 @@ use nom::{
     sequence::{delimited, pair, preceded, tuple},
     IResult,
 };
-mod lex_test;
-use lex_test::{lexer, Token, TokenKind};
+use crate::lex_test::Token;
+use crate::lex_test::TokenKind;
 use std::collections::VecDeque;
+use std::collections::HashMap;
 
 ////////////////////// ENUMS FOR PARSE /////////////////////////////////
 
@@ -77,18 +78,18 @@ pub enum AstNode {
     CompOp { operator: Compop, left: Box<AstNode>, right: Box<AstNode> },
     BoolOp { operator: Boolop, left: Box<AstNode>, right: Box<AstNode> },
     DirecOp { direction: Direction, expr: Box<AstNode> },
-    VarBind { var_name: String, expr: Box<AstNode> },
-    VarRef { var_name: String },
+    //VarBind { var_name: String, expr: Box<AstNode> },
+    IdentRef { var_name: String },
     AddAssign { var_name: String, expr: Box<AstNode> },
     Ident(String),
-    Num(i32),
+    Num(f32),
     IfStatement { operation: Box<AstNode>, body: Box<AstNode> },
     WhileStatement { operation: Box<AstNode>, body: Box<AstNode> },
     PenStatusUpdate { pen_down: bool },
-    PenColorUpdate { pen_color: i32 },
-    PenPosUpdate { coordinate: PenPos, value: i32 },
-    PenAngleUpdate { update_kind: PenAngle, value: i32 },
-    Query { query_kind: QueryKind, value: i32 },
+    PenColorUpdate { pen_color: f32 },
+    PenPosUpdate { coordinate: PenPos, value: f32 },
+    PenAngleUpdate { update_kind: PenAngle, value: f32 },
+    Query { query_kind: QueryKind, value: f32 },
     Procedure { name: String, args: Vec<String>, body: Vec<AstNode> },
 }
 
@@ -155,7 +156,7 @@ fn num(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
     let num_token = tokens.pop_front().ok_or("Expected number token")?;
 
     
-    let num_value = num_token.value.parse::<i32>().map_err(|_| format!("Invalid number token: {}", num_token.value))?;
+    let num_value = num_token.value.parse::<f32>().map_err(|_| format!("Invalid number token: {}", num_token.value))?;
     Ok(AstNode::Num(num_value))
 }
 
@@ -174,51 +175,45 @@ fn expr(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
     }
 }
 
-fn main() { 
-
-    let file_path = "./src/test.lg";
-   
-    // Generate Tokens, manage errors
-    let tokens = match lexer(file_path) {
-        Ok(tokens) => tokens,
-        Err(e) => {
-            match e.kind() {    
-                ErrorKind::NotFound => panic!("Error: File not found"),
-                ErrorKind::PermissionDenied => panic!("Error: Permission to file denied"),
-                ErrorKind::InvalidData => panic!("Nnvalid (non utf-8) character encountered file"),
-                // Generic handling of other IO errors
-                _ => panic!("Error: {}", e),
-            }
-        }
-    };
- 
-    // Parse & generate AST
-    let ast = match parse(tokens) {
-        Ok(ast) => ast,
-        Err(e) => panic!("Error: {}", e),
-    };
-
-    println!("{:?}", &ast);
-
-    // Loop nodes and evaluate
-    evaluate(ast);
-        
-}
-
-////////////// EVALUATORS /////////////
-
-
-fn evaluate(ast: Vec<AstNode>) {
-        
-    for node in ast {
-
-        match node {
-            AstNode::MakeOp { var, expr } => todo!(),
-            _ => panic!("no match"),
-        }
-    }
+fn main() {
 
 }
+
+//fn main() { 
+//
+//    let file_path = "./src/test.lg";
+//   
+//    // Generate Tokens, manage errors
+//    let tokens = match lexer(file_path) {
+//        Ok(tokens) => tokens,
+//        Err(e) => {
+//            match e.kind() {    
+//                ErrorKind::NotFound => panic!("Error: File not found"),
+//                ErrorKind::PermissionDenied => panic!("Error: Permission to file denied"),
+//                ErrorKind::InvalidData => panic!("Nnvalid (non utf-8) character encountered file"),
+//                // Generic handling of other IO errors
+//                _ => panic!("Error: {}", e),
+//            }
+//        }
+//    };
+// 
+//    // Parse & generate AST
+//    let ast = match parse(tokens) {
+//        Ok(ast) => ast,
+//        Err(e) => panic!("Error: {}", e),
+//    };
+//
+//    println!("{:?}", &ast);
+//
+//    // Loop nodes and evaluate
+//    let mut evaluator = Evaluator::new();
+//    evaluator.evaluate(ast); 
+//}
+
+
+
+
+
 
 
 

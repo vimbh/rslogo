@@ -2,6 +2,7 @@ use std::io::{self, BufReader, BufRead, ErrorKind};
 use std::fs::File;
 use std::collections::VecDeque;
 
+mod lex_test {}
 #[derive(Debug, PartialEq)]
 pub enum TokenKind {
     MAKEOP,
@@ -104,7 +105,7 @@ fn to_token(input: &str) -> Token {
 
 }
 
-    pub fn lexer(file_path: &str) -> io::Result<VecDeque<Token>> {
+ pub fn lexer(file_path: &str) -> io::Result<VecDeque<Token>> {
   
     let file = BufReader::new(
                         File::open(file_path)?
@@ -126,25 +127,26 @@ fn to_token(input: &str) -> Token {
     Ok(tokens)  
 } 
 
+fn main() {}
 
-fn main() {
-
-    let file_path = "./src/test.lg";
-   
-    let tokens = match lexer(file_path) {
-        Ok(tokens) => tokens,
-        Err(e) => {
-            match e.kind() {
-                ErrorKind::NotFound => panic!("Error: File not found"),
-                ErrorKind::PermissionDenied => panic!("Error: Permission to file denied"),
-                ErrorKind::InvalidData => panic!("Nnvalid (non utf-8) character encountered file"),
-                // Generic handling of other IO errors
-                _ => panic!("Error: {}", e),
-            }
-        }
-    };
-   
-    println!("{:?}", tokens); 
-   
-    
-}
+//fn main() {
+//
+//    let file_path = "./src/test.lg";
+//   
+//    let tokens = match lexer(file_path) {
+//        Ok(tokens) => tokens,
+//        Err(e) => {
+//            match e.kind() {
+//                ErrorKind::NotFound => panic!("Error: File not found"),
+//                ErrorKind::PermissionDenied => panic!("Error: Permission to file denied"),
+//                ErrorKind::InvalidData => panic!("Nnvalid (non utf-8) character encountered file"),
+//                // Generic handling of other IO errors
+//                _ => panic!("Error: {}", e),
+//            }
+//        }
+//    };
+//   
+//    println!("{:?}", tokens); 
+//   
+//    
+//}
