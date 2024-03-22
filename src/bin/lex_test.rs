@@ -1,4 +1,4 @@
-use std::io::{self, BufReader, BufRead, ErrorKind};
+use std::io::{self, BufReader, BufRead};
 use std::fs::File;
 use std::collections::VecDeque;
 
@@ -127,6 +127,7 @@ fn to_token(input: &str) -> Token {
     Ok(tokens)  
 } 
 
+#[allow(dead_code)]
 fn main() {}
 
 //fn main() {

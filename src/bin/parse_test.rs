@@ -175,6 +175,7 @@ fn expr(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
     }
 }
 
+#[allow(dead_code)]
 fn main() {
 
 }
