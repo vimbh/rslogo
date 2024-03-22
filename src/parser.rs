@@ -1,113 +1,176 @@
-use std::io::{self, BufRead, BufReader};
+#![allow(unused_imports)]
+#![allow(dead_code)]
+
+use std::io::{self, BufRead, BufReader, ErrorKind};
 use std::fs::File;
-pub use nom::{
+use std::fmt;
+use std::error::Error;
+use nom::{
     branch::alt,
     bytes::complete::tag,
-    character::complete::{digit1, multispace0},
-    combinator::map_res,
+    character::complete::{digit1, alpha1, multispace0},
+    combinator::{map,map_res},
     sequence::{delimited, pair, preceded, tuple},
     IResult,
 };
+use std::collections::VecDeque;
 
+use crate::lexer::{Token, TokenKind};
 
-#[derive(Debug)] 
-enum Expr {
-    Term(Box<Term>),
-    BinExp(BinOp, Box<Expr>, Box<Term>),
-}
+////////////////////// ENUMS FOR PARSE /////////////////////////////////
 
 #[derive(Debug)]
-enum BinOp {
+pub enum Binop {
     Add,
     Sub,
-    Mul,
+    Mul,    
     Div,
 }
 
 #[derive(Debug)]
-enum Term {
-    Int(i32),
-    Id(String),
+pub enum Compop {
+    EQ,
+    NE,
+    LT,
+    GT,
 }
-// Returns each word in the file in a Vec<String>, else returns io::error
-fn read_file(file_path: std::path::PathBuf) -> io::Result<Vec<String>> {
-    let file = File::open(file_path)?;
-    let reader = BufReader::new(file);
-    let mut file_contents: Vec<String> = Vec::new();
 
-    for read_line in reader.lines() {
-        let line = read_line?;
-        file_contents.extend(line.split_whitespace().map(String::from));    
+#[derive(Debug)]
+pub enum Boolop {
+    AND,
+    OR,
+}
+
+#[derive(Debug)]
+pub enum Direction {
+    FORWARD,
+    BACK,
+    RIGHT,
+    LEFT,
+}
+
+
+#[derive(Debug)]
+pub enum PenPos {
+    SETX,
+    SETY,
+}
+
+#[derive(Debug)]
+pub enum PenAngle {
+    SETHEADING,
+    TURN,
+}
+
+#[derive(Debug)]
+pub enum QueryKind {
+    XCOR,
+    YCOR,
+    HEADING,
+    COLOR,
+}
+
+#[derive(Debug)]
+pub enum AstNode {
+    MakeOp { var: String, expr: Box<AstNode> },
+    BinaryOp { operator: Binop, left: Box<AstNode>, right: Box<AstNode> },
+    CompOp { operator: Compop, left: Box<AstNode>, right: Box<AstNode> },
+    BoolOp { operator: Boolop, left: Box<AstNode>, right: Box<AstNode> },
+    DirecOp { direction: Direction, expr: Box<AstNode> },
+    VarBind { var_name: String, expr: Box<AstNode> },
+    VarRef { var_name: String },
+    AddAssign { var_name: String, expr: Box<AstNode> },
+    Ident(String),
+    Num(i32),
+    IfStatement { operation: Box<AstNode>, body: Box<AstNode> },
+    WhileStatement { operation: Box<AstNode>, body: Box<AstNode> },
+    PenStatusUpdate { pen_down: bool },
+    PenColorUpdate { pen_color: i32 },
+    PenPosUpdate { coordinate: PenPos, value: i32 },
+    PenAngleUpdate { update_kind: PenAngle, value: i32 },
+    Query { query_kind: QueryKind, value: i32 },
+    Procedure { name: String, args: Vec<String>, body: Vec<AstNode> },
+}
+
+///////////////// PARSER FUNCS /////////////////////////////////
+
+pub fn parse(tokens: VecDeque<Token>) -> Result<Vec<AstNode>, String> {
+    let mut tokens = tokens;
+    let mut ast = Vec::new();
+    
+    while let Some(_) = tokens.front() {
+        ast.push(expr(&mut tokens)?);
     }
     
-    Ok(file_contents) 
-
+    Ok(ast)
 }
 
-fn expr(input: &str) -> IResult<&str, Expr> {
-    alt((bin_exp, term))(input)
-}
-
-
-fn bin_exp(input: &str) -> IResult<&str, Expr> {
-    let (input, _) = multispace0(input)?;
-    let (input, bin_op) = binop(input)?;
-    let (input, _) = multispace0(input)?;
-    let (input, _) = tag("(")(input)?;
-    let (input, _) = multispace0(input)?;
-    let (input, expr1) = expr(input)?;
-    let (input, _) = multispace0(input)?;
-    let (input, _) = tag(")")(input)?;
-    let (input, _) = multispace0(input)?;
-    let (input, _) = tag("(")(input)?;
-    let (input, _) = multispace0(input)?;
-    let (input, term) = term(input)?;
-    let (input, _) = multispace0(input)?;
-    let (input, _) = tag(")")(input)?;
-    Ok((input, Expr::BinExp(bin_op, Box::new(expr1), Box::new(term))))
-}
-
-fn binop(input: &str) -> IResult<&str, BinOp> {
-    alt((
-        map_res(tag("+"), |_| Ok(BinOp::Add)),
-        map_res(tag("-"), |_| Ok(BinOp::Sub)),
-        map_res(tag("*"), |_| Ok(BinOp::Mul)),
-        map_res(tag("/"), |_| Ok(BinOp::Div)),
-    ))(input)
-}
-
-fn term(input: &str) -> IResult<&str, Term> {
-    alt((int_term, id_term))(input)
-}
-
-fn int_term(input: &str) -> IResult<&str, Term> {
-    let (input, int_val) = map_res(digit1, |s: &str| s.parse::<i32>())(input)?;
-    Ok((input, Term::Int(int_val)))
-}
-
-fn id_term(input: &str) -> IResult<&str, Term> {
-    let (input, id_val) = map_res(digit1, |s: &str| s.parse::<i32>())(input)?;
-    Ok((input, Term::Id(id_val.to_string())))
-}
-
-
-
-pub fn lexer(file_path: std::path::PathBuf) {
+fn make_op(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
+    // Consume 'Make' token
+    let make_token = tokens.pop_front().ok_or("Expected 'Make' token")?;
+    if make_token.kind != TokenKind::MAKEOP {
+        return Err(format!("Expected 'Make' token, found {:?}", make_token.kind));
+    }
     
-    let file_contents = match read_file(file_path) {
-        Ok(contents) => contents,
-        Err(error) => panic!("Error: {:?}", error),
-    };
+    // Consume identifier token
+    let ident_token = tokens.pop_front().ok_or("Expected identifier token after 'Make'")?;
+    if ident_token.kind != TokenKind::IDENT {
+        return Err(format!("Expected identifier token after 'Make', found {:?}", ident_token.kind));
+    }
     
-    dbg!(file_contents);
-    todo!();
+    // Parse the expression following the identifier
+    let expr = expr(tokens)?;
+    
+    Ok(AstNode::MakeOp {
+        var: ident_token.value,
+        expr: Box::new(expr),
+    })
+}
+
+fn binary_op(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
+    // Consume the operator token
+    let operator_token = tokens.pop_front().ok_or("Expected binary operator token")?;
+    if operator_token.kind != TokenKind::BINOP {
+        return Err(format!("Expected binary operator token, found {:?}", operator_token.kind));
+    }
+    
+    // Parse the left and right operands
+    let left = expr(tokens)?;
+    let right = expr(tokens)?;
+    
+    Ok(AstNode::BinaryOp {
+        operator: match operator_token.value.as_str() {
+            "+" => Binop::Add,
+            "-" => Binop::Sub,
+            "*" => Binop::Mul,
+            "/" => Binop::Div,
+            _ => return Err(format!("Unknown binary operator: {}", operator_token.value)),
+        },
+        left: Box::new(left),
+        right: Box::new(right),
+    })
+}
+
+fn num(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
+    let num_token = tokens.pop_front().ok_or("Expected number token")?;
+
+    
+    let num_value = num_token.value.parse::<i32>().map_err(|_| format!("Invalid number token: {}", num_token.value))?;
+    Ok(AstNode::Num(num_value))
 }
 
 
-fn main() {
-    let input = "1 + 2 * 3";
-    match expr(input) {
-        Ok(("", ast)) => println!("AST: {:?}", ast),
-        _ => println!("Parsing failed"),
+fn expr(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
+    // Peek at current token
+    if let Some(token) = tokens.front() {
+        match &token.kind {
+            TokenKind::MAKEOP => make_op(tokens),
+            TokenKind::BINOP => binary_op(tokens),
+            TokenKind::NUM => num(tokens),
+            _ => Err(format!("Unexpected token: {:?}", token.value)),
+        }
+    } else {
+        Err("Unexpected end of tokens".to_string())
     }
 }
+

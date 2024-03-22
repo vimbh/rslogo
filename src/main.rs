@@ -1,9 +1,12 @@
 use clap::Parser;
-use unsvg::Image;
+//use unsvg::Image;
 //mod parser;
 //use parser::lexer;
 mod lexer;
 use lexer::lexer;
+mod parser;
+use parser::parse;
+use std::io::ErrorKind;
 
 /// A simple program to parse four arguments using clap.
 #[derive(Parser)]
@@ -21,13 +24,36 @@ struct Args {
     width: u32,
 }
 
+
 fn main() -> Result<(), ()> {
     let args: Args = Args::parse();
     // Access the parsed arguments
     let file_path = args.file_path;
-    // Read file
-    let tokens = lexer(file_path);
     
+    // Generate Tokens, manage errors
+    let tokens = match lexer(file_path) {
+        Ok(tokens) => tokens,
+        Err(e) => {
+            match e.kind() {    
+                ErrorKind::NotFound => panic!("Error: File not found"),
+                ErrorKind::PermissionDenied => panic!("Error: Permission to file denied"),
+                ErrorKind::InvalidData => panic!("Nnvalid (non utf-8) character encountered file"),
+                // Generic handling of other IO errors
+                _ => panic!("Error: {}", e),
+            }
+        }
+    };
+
+    // Parse & generate AST
+    let ast = match parse(tokens) {
+        Ok(ast) => ast,
+        Err(e) => panic!("Error: {}", e),
+    };
+
+    println!("{:?}", &ast);
+
+
+
 
     todo!()
 
