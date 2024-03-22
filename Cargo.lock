@@ -388,7 +388,6 @@ dependencies = [
  "clap",
  "nom",
  "unsvg",
- "utf8-chars",
 ]
 
 [[package]]
@@ -642,15 +641,6 @@ dependencies = [
  "strict-num",
  "svgtypes",
  "tiny-skia-path",
-]
-
-[[package]]
-name = "utf8-chars"
-version = "3.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52a8d9bfcaafb39b9533e9d2da61ced3ec86080358347fd25504ddee6fc23b4e"
-dependencies = [
- "arrayvec",
 ]
 
 [[package]]
