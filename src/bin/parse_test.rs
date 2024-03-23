@@ -38,8 +38,8 @@ pub enum Compop {
 
 #[derive(Debug)]
 pub enum Boolop {
-    And,
-    Or,
+    AND,
+    OR,
 }
 
 #[derive(Debug)]
@@ -176,6 +176,28 @@ fn comparison_op(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
     })
 }
 
+fn bool_op(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
+    // Consume the operator token
+    let operator_token = tokens.pop_front().ok_or("Expected boolean operator token")?;
+    if operator_token.kind != TokenKind::BOOLOP {
+        return Err(format!("Expected boolean operator token, found {:?}", operator_token.kind));
+    }
+    
+    // Parse the left And right operAnds
+    let left = expr(tokens)?;
+    let right = expr(tokens)?;
+    
+    Ok(AstNode::BooleanOp {
+        operator: match operator_token.value.as_str() {
+            "AND" => Boolop::AND,
+            "OR" => Boolop::OR,
+            _ => return Err(format!("Unknown binary operator: {}", operator_token.value)),
+        },
+        left: Box::new(left),
+        right: Box::new(right),
+    })
+}
+
 fn num(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
     let num_token = tokens.pop_front().ok_or("Expected number token")?;
 
@@ -201,6 +223,7 @@ fn expr(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
             TokenKind::COMPOP => comparison_op(tokens),
             TokenKind::NUM => num(tokens),
             TokenKind::IDENTREF => ident_ref(tokens),
+            TokenKind::BOOLOP => bool_op(tokens),
             _ => Err(format!("Unexpected token: {:?}", token)),
         }
     } else {
