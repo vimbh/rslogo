@@ -51,7 +51,7 @@ impl Evaluator {
     }
 
 
-    // Helper function to evaluate numerical expressions
+    // Helper fn: evaluates any expr that could return a float (Num, Variable ref)
     fn eval_numeric_expression(&mut self, node: &AstNode) -> f32 {
         
         match node {
@@ -66,9 +66,22 @@ impl Evaluator {
         }
     }
 
-
+    // Helper fn: evaluates any expr that could return a float (Num, Variable ref)
+    fn eval_bool_expression(&mut self, node: &AstNode) -> bool {
+        
+        match node {
+            AstNode::IdentRef(var) => {
+                match self.eval_ref(&var) {
+                    &Value::Bool(value) => value,
+                    _ => panic!("Variable {} is bound to a Float value, not a Boolean.", var),
+                }
+            }
+            _ => panic!("Value not recognised"),
+        }
+    }
 
     // Eval Binary Operations (+, -, *, /)
+    // Binop args must return a num
     fn eval_binary_op(&mut self, operator: &Binop, left: &AstNode, right: &AstNode) -> f32 {
          
         let left_val = match left {
@@ -90,8 +103,9 @@ impl Evaluator {
     }
    
     // Eval Comparison Operations (EQ, NE, GT, LT)
+    // Comps args must return a num
     fn eval_comp_op(&mut self, operator: &Compop, left: &AstNode, right: &AstNode) -> bool {
-       
+          
         let left_val = match left {
             AstNode::BinaryOp { operator, left, right } => self.eval_binary_op(&operator, &left, &right),
             _ => self.eval_numeric_expression(left),
@@ -109,7 +123,30 @@ impl Evaluator {
             Compop::GT => left_val > right_val,
         }
     }
+   
+    // Eval Boolean Operations (AND, OR)
+    // Bool args must return a bool
+    fn eval_bool_op(&mut self, operator: &Boolop, left: &AstNode, right: &AstNode) -> bool {
+       
+        let left_val = match left {
+            AstNode::BooleanOp { operator, left, right } => self.eval_bool_op(&operator, &left, &right),
+            AstNode::ComparisonOp { operator, left, right } => self.eval_comp_op(&operator, &left, &right),
+            _ => self.eval_bool_expression(left),
+        };
+
+        let right_val = match right {
+            AstNode::BooleanOp { operator, left, right } => self.eval_bool_op(&operator, &left, &right),
+            AstNode::ComparisonOp { operator, left, right } => self.eval_comp_op(&operator, &left, &right),
+            _ => self.eval_bool_expression(right),
+        };
+        
+        match operator {
+            Boolop::AND => left_val & right_val,
+            Boolop::OR => left_val || right_val,
+        }
+    }
     
+    // Retrieve a variables value
     fn eval_ref(&mut self, var: &String) -> &Value {
 
         match self.environment.get(var) {
@@ -124,7 +161,7 @@ impl Evaluator {
             AstNode::Num(val) => Value::Float( *val ),
             AstNode::BinaryOp { operator, left, right } => Value::Float( self.eval_binary_op(&operator, &left, &right) ),
             AstNode::ComparisonOp { operator, left, right } => Value::Bool( self.eval_comp_op(&operator, &left, &right) ),
-            //AstNode::BoolOp { operator, left, right } => self.eval_bool_op(&operator, &left, &right),
+            AstNode::BooleanOp { operator, left, right } => Value::Bool( self.eval_bool_op(&operator, &left, &right) ),
             //AstNode::VarRef
             _ => todo!(),
         };
