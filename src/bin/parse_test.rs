@@ -81,10 +81,10 @@ pub enum AstNode {
     Num(f32),
     IfStatement { operation: Box<AstNode>, body: Box<AstNode> },
     WhileStatement { operation: Box<AstNode>, body: Box<AstNode> },
-    PenStatusUpdate { pen_down: bool },
-    PenColorUpdate { pen_color: f32 },
+    PenStatusUpdate(bool),
+    PenColorUpdate(Box<AstNode>),
     PenPosUpdate { update_type: PenPos, value: Box<AstNode> },
-    Query { query_kind: QueryKind, value: f32 },
+    Query(QueryKind),
     Procedure { name: String, args: Vec<String>, body: Vec<AstNode> },
 }
 
@@ -215,7 +215,7 @@ fn pen_position_update(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> 
     let pos_token = tokens.pop_front().ok_or("Expected setPosition token")?;
     
     // Parse the arg to the position setter
-    let parsed_value = num(tokens)?;
+    let parsed_value = expr(tokens)?;
 
     Ok(AstNode::PenPosUpdate {
          update_type: match pos_token.value.as_str() {
@@ -229,9 +229,43 @@ fn pen_position_update(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> 
     })
 }
 
+fn pen_status_update(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
+    let status_token = tokens.pop_front().ok_or("Expected setStatus token")?;
+    
+    Ok(AstNode::PenStatusUpdate(
+         match status_token.value.as_str() {
+            "PENUP" => false,
+            "PENDOWN" => true,
+            _ => return Err(format!("Unknown position update: {}", status_token.value)),
+         }
+    ))
+}
 
+fn pen_color_update(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
+    tokens.pop_front().ok_or("Expected setColor token")?;
+    
+    // Parse the arg to the position setter
+    let parsed_value = expr(tokens)?;
 
+    Ok(AstNode::PenColorUpdate(
+         Box::new(parsed_value)
+    ))
+}
 
+fn query(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
+    let query_token = tokens.pop_front().ok_or("Expected PosQueryKind token")?;
+
+    Ok(AstNode::Query(
+        match query_token.value.as_str() {
+            "XCOR" => QueryKind::XCOR,
+            "YCOR" => QueryKind::YCOR,
+            "HEADING" => QueryKind::HEADING,
+            "COLOR" => QueryKind::COLOR,
+            _ => return Err(format!("Unknown query: {}", query_token.value)),
+        // NTS: can i just _ => unreachable!()  for all of the matches in parse? bc doesnt lexer take care of this? 
+         } 
+    ))
+}
 
 
 fn expr(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
@@ -245,6 +279,9 @@ fn expr(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
             TokenKind::IDENTREF => ident_ref(tokens),
             TokenKind::BOOLOP => bool_op(tokens),
             TokenKind::PENPOS => pen_position_update(tokens),
+            TokenKind::PENSTATUS => pen_status_update(tokens),
+            TokenKind::PENCOLOR => pen_color_update(tokens),
+            TokenKind::QUERY => query(tokens),
             _ => Err(format!("Unexpected token: {:?}", token)),
         }
     } else {

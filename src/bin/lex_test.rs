@@ -72,7 +72,7 @@ fn to_token(input: &str) -> Token {
         "XCOR" => Token { kind: TokenKind::QUERY, value: input.to_string() },
         "YCOR" => Token { kind: TokenKind::QUERY, value: input.to_string() },
         "HEADING" => Token { kind: TokenKind::QUERY, value: input.to_string() },
-        "COLOR" => Token { kind: TokenKind::PENCOLOR, value: input.to_string() },
+        "COLOR" => Token { kind: TokenKind::QUERY, value: input.to_string() },
         // If Statements
         "IF" => Token { kind: TokenKind::IFSTMNT, value: input.to_string() },
         // While statements
@@ -86,7 +86,7 @@ fn to_token(input: &str) -> Token {
         s if s.chars().all(|c| c.is_alphabetic()) => Token { kind: TokenKind::PROCNAME, value: s.to_string()},
         // Variables and Numbers
         s if s.starts_with('"') => {
-            if s[1..].chars().all(|c| c.is_ascii_digit()) || ( s[1..].starts_with('-') && s[2..].chars().all(|c| c.is_ascii_digit()) ) {
+            if let Ok(_) = s[1..].parse::<f32>() {
                 Token { kind: TokenKind::NUM, value: s[1..].to_string() }
             } else if s[1..].chars().all(|c| c.is_alphanumeric()) {
                 Token { kind: TokenKind::IDENT, value: s[1..].to_string() }
