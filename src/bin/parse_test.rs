@@ -38,8 +38,8 @@ pub enum Compop {
 
 #[derive(Debug)]
 pub enum Boolop {
-    AND,
-    OR,
+    And,
+    Or,
 }
 
 #[derive(Debug)]
@@ -75,11 +75,11 @@ pub enum QueryKind {
 pub enum AstNode {
     MakeOp { var: String, expr: Box<AstNode> },
     BinaryOp { operator: Binop, left: Box<AstNode>, right: Box<AstNode> },
-    CompOp { operator: Compop, left: Box<AstNode>, right: Box<AstNode> },
-    BoolOp { operator: Boolop, left: Box<AstNode>, right: Box<AstNode> },
+    ComparisonOp { operator: Compop, left: Box<AstNode>, right: Box<AstNode> },
+    BooleanOp { operator: Boolop, left: Box<AstNode>, right: Box<AstNode> },
     DirecOp { direction: Direction, expr: Box<AstNode> },
     //VarBind { var_name: String, expr: Box<AstNode> },
-    IdentRef { var_name: String },
+    IdentRef(String),
     AddAssign { var_name: String, expr: Box<AstNode> },
     Ident(String),
     Num(f32),
@@ -135,7 +135,7 @@ fn binary_op(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
         return Err(format!("Expected binary operator token, found {:?}", operator_token.kind));
     }
     
-    // Parse the left and right operands
+    // Parse the left And right operands
     let left = expr(tokens)?;
     let right = expr(tokens)?;
     
@@ -152,6 +152,30 @@ fn binary_op(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
     })
 }
 
+fn comparison_op(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
+    // Consume the operator token
+    let operator_token = tokens.pop_front().ok_or("Expected comparison operator token")?;
+    if operator_token.kind != TokenKind::COMPOP {
+        return Err(format!("Expected binary operator token, found {:?}", operator_token.kind));
+    }
+    
+    // Parse the left And right operAnds
+    let left = expr(tokens)?;
+    let right = expr(tokens)?;
+    
+    Ok(AstNode::ComparisonOp {
+        operator: match operator_token.value.as_str() {
+            "EQ" => Compop::EQ,
+            "NE" => Compop::NE,
+            "LT" => Compop::LT,
+            "GT" => Compop::GT,
+            _ => return Err(format!("Unknown binary operator: {}", operator_token.value)),
+        },
+        left: Box::new(left),
+        right: Box::new(right),
+    })
+}
+
 fn num(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
     let num_token = tokens.pop_front().ok_or("Expected number token")?;
 
@@ -160,6 +184,13 @@ fn num(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
     Ok(AstNode::Num(num_value))
 }
 
+fn ident_ref(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
+    let ident_token = tokens.pop_front().ok_or("Expected ident token")?;
+
+    
+    let ident_value = ident_token.value;
+    Ok(AstNode::IdentRef(ident_value))
+}
 
 fn expr(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
     // Peek at current token
@@ -167,8 +198,10 @@ fn expr(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
         match &token.kind {
             TokenKind::MAKEOP => make_op(tokens),
             TokenKind::BINOP => binary_op(tokens),
+            TokenKind::COMPOP => comparison_op(tokens),
             TokenKind::NUM => num(tokens),
-            _ => Err(format!("Unexpected token: {:?}", token.value)),
+            TokenKind::IDENTREF => ident_ref(tokens),
+            _ => Err(format!("Unexpected token: {:?}", token)),
         }
     } else {
         Err("Unexpected end of tokens".to_string())
@@ -192,7 +225,7 @@ fn main() {
 //                ErrorKind::NotFound => panic!("Error: File not found"),
 //                ErrorKind::PermissionDenied => panic!("Error: Permission to file denied"),
 //                ErrorKind::InvalidData => panic!("Nnvalid (non utf-8) character encountered file"),
-//                // Generic handling of other IO errors
+//                // Generic hAndling of other IO errors
 //                _ => panic!("Error: {}", e),
 //            }
 //        }
@@ -206,7 +239,7 @@ fn main() {
 //
 //    println!("{:?}", &ast);
 //
-//    // Loop nodes and evaluate
+//    // Loop nodes And evaluate
 //    let mut evaluator = Evaluator::new();
 //    evaluator.evaluate(ast); 
 //}
