@@ -87,7 +87,7 @@ fn to_token(input: &str) -> Token {
         s if s.chars().all(|c| c.is_alphabetic()) => Token { kind: TokenKind::PROCNAME, value: s.to_string()},
         // Variables and Numbers
         s if s.starts_with('"') => {
-            if s[1..].chars().all(|c| c.is_ascii_digit()) {
+            if s[1..].chars().all(|c| c.is_ascii_digit()) || ( s[1..].starts_with('-') && s[2..].chars().all(|c| c.is_ascii_digit()) ) {
                 Token { kind: TokenKind::NUM, value: s[1..].to_string() }
             } else if s[1..].chars().all(|c| c.is_alphanumeric()) {
                 Token { kind: TokenKind::IDENT, value: s[1..].to_string() }
@@ -123,7 +123,6 @@ fn to_token(input: &str) -> Token {
         tokens.append(&mut line);
     }
  
-                
     Ok(tokens)  
 } 
 
