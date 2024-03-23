@@ -25,7 +25,8 @@ fn main() {
             }
         }
     };
- 
+    // println!("{:?}",&tokens);
+    
     // Parse & generate AST
     let ast = match parse(tokens) {
         Ok(ast) => ast,
