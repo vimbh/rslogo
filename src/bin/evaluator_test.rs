@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use crate::parse_test;
-use parse_test::{AstNode, Binop};
+use parse_test::{AstNode, Binop, Boolop, Compop};
 
 #[allow(unused)]
 pub struct Position {
@@ -10,11 +10,19 @@ pub struct Position {
     heading: f32,
 }
 
+#[derive(Debug)]
+pub enum Value {
+    Float(f32),
+    Bool(bool),
+}
+
 #[allow(unused)]
 pub struct Evaluator {
-    environment: HashMap<String, f32>,
+    environment: HashMap<String, Value>,
     turtle : Position,
 }
+
+
 
 impl Evaluator {
 
@@ -31,37 +39,46 @@ impl Evaluator {
         }
     }
 
-    // Master eval func
+    // Root Eval function
     pub fn evaluate(&mut self, ast: Vec<AstNode>) {
         
         for node in ast {
-            //println!("{:?}", &node);
-            
             match node {
                 AstNode::MakeOp { var, expr } => self.make_eval(var, &expr), 
                 _ => todo!(),
             }
-
-
         }
     }
 
-    fn eval_num(&mut self, val: &f32) -> f32 {
-        *val
+
+    // Helper function to evaluate numerical expressions
+    fn eval_numeric_expression(&mut self, node: &AstNode) -> f32 {
+        
+        match node {
+            AstNode::Num(val) => *val,
+            AstNode::IdentRef(var) => {
+                match self.eval_ref(&var) {
+                    &Value::Float(num) => num,
+                    _ => panic!("Variable {} is bound to a Boolean value, not a Float.", var),
+                }
+            }
+            _ => panic!("Value not recognised"),
+        }
     }
 
+
+
+    // Eval Binary Operations (+, -, *, /)
     fn eval_binary_op(&mut self, operator: &Binop, left: &AstNode, right: &AstNode) -> f32 {
-            
+         
         let left_val = match left {
-            AstNode::Num(val) => self.eval_num(&val),
-            AstNode::BinaryOp { operator, left, right } => self.eval_binary_op(&operator, &left, &right), 
-            _ => panic!("Value not recognised"),
+            AstNode::BinaryOp { operator, left, right } => self.eval_binary_op(&operator, &left, &right),
+            _ => self.eval_numeric_expression(left),
         };
-        
+
         let right_val = match right {
-            AstNode::Num(val) => self.eval_num(&val),
-            AstNode::BinaryOp { operator, left, right } => self.eval_binary_op(&operator, &left, &right), 
-            _ => panic!("Value not recognised"),
+            AstNode::BinaryOp { operator, left, right } => self.eval_binary_op(&operator, &left, &right),
+            _ => self.eval_numeric_expression(right),
         };
 
         match operator {
@@ -71,18 +88,46 @@ impl Evaluator {
             Binop::Div => left_val / right_val,
         }
     }
+   
+    // Eval Comparison Operations (EQ, NE, GT, LT)
+    fn eval_comp_op(&mut self, operator: &Compop, left: &AstNode, right: &AstNode) -> bool {
+       
+        let left_val = match left {
+            AstNode::BinaryOp { operator, left, right } => self.eval_binary_op(&operator, &left, &right),
+            _ => self.eval_numeric_expression(left),
+        };
+
+        let right_val = match right {
+            AstNode::BinaryOp { operator, left, right } => self.eval_binary_op(&operator, &left, &right),
+            _ => self.eval_numeric_expression(right),
+        };
+        
+        match operator {
+            Compop::EQ => left_val == right_val,
+            Compop::NE => left_val != right_val,
+            Compop::LT => left_val < right_val,
+            Compop::GT => left_val > right_val,
+        }
+    }
+    
+    fn eval_ref(&mut self, var: &String) -> &Value {
+
+        match self.environment.get(var) {
+            Some(value) => value,
+            _ => panic!("This variable has not been instantiated: {}", &var),
+        }
+    }
 
     fn make_eval(&mut self, var: String, expr: &AstNode ) {
         
         let assign_val = match expr {
-            AstNode::Num(val) => self.eval_num(&val),
-            AstNode::BinaryOp { operator, left, right } => self.eval_binary_op(&operator, &left, &right), 
-            //AstNode::CompOp
-            //ASTNode::BoolOp
+            AstNode::Num(val) => Value::Float( *val ),
+            AstNode::BinaryOp { operator, left, right } => Value::Float( self.eval_binary_op(&operator, &left, &right) ),
+            AstNode::ComparisonOp { operator, left, right } => Value::Bool( self.eval_comp_op(&operator, &left, &right) ),
+            //AstNode::BoolOp { operator, left, right } => self.eval_bool_op(&operator, &left, &right),
             //AstNode::VarRef
             _ => todo!(),
         };
-        println!("{}, {}", var, assign_val);
         
         // Add binding to map
         self.environment.insert(var, assign_val);
