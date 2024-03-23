@@ -1,2 +1,4 @@
-MAKE "x "7
-MAKE "y EQ "5 + :x "-2
+MAKE "X EQ "5 "5
+SETHEADING "270
+TURN "-90
+
