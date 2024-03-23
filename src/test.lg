@@ -1,1 +1,2 @@
-MAKE "x + "5 "2
+MAKE "x "7
+MAKE "y EQ "5 + :x "-2
