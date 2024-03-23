@@ -55,10 +55,6 @@ pub enum Direction {
 pub enum PenPos {
     SETX,
     SETY,
-}
-
-#[derive(Debug)]
-pub enum PenAngle {
     SETHEADING,
     TURN,
 }
@@ -87,8 +83,7 @@ pub enum AstNode {
     WhileStatement { operation: Box<AstNode>, body: Box<AstNode> },
     PenStatusUpdate { pen_down: bool },
     PenColorUpdate { pen_color: f32 },
-    PenPosUpdate { coordinate: PenPos, value: f32 },
-    PenAngleUpdate { update_kind: PenAngle, value: f32 },
+    PenPosUpdate { update_type: PenPos, value: Box<AstNode> },
     Query { query_kind: QueryKind, value: f32 },
     Procedure { name: String, args: Vec<String>, body: Vec<AstNode> },
 }
@@ -198,6 +193,7 @@ fn bool_op(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
     })
 }
 
+
 fn num(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
     let num_token = tokens.pop_front().ok_or("Expected number token")?;
 
@@ -214,6 +210,30 @@ fn ident_ref(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
     Ok(AstNode::IdentRef(ident_value))
 }
 
+
+fn pen_position_update(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
+    let pos_token = tokens.pop_front().ok_or("Expected setPosition token")?;
+    
+    // Parse the arg to the position setter
+    let parsed_value = num(tokens)?;
+
+    Ok(AstNode::PenPosUpdate {
+         update_type: match pos_token.value.as_str() {
+            "SETX" => PenPos::SETX,
+            "SETY" => PenPos::SETY,
+            "TURN" => PenPos::TURN,
+            "SETHEADING" => PenPos::SETHEADING,
+            _ => return Err(format!("Unknown position update: {}", pos_token.value)),
+         }, 
+         value: Box::new(parsed_value), 
+    })
+}
+
+
+
+
+
+
 fn expr(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
     // Peek at current token
     if let Some(token) = tokens.front() {
@@ -224,6 +244,7 @@ fn expr(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
             TokenKind::NUM => num(tokens),
             TokenKind::IDENTREF => ident_ref(tokens),
             TokenKind::BOOLOP => bool_op(tokens),
+            TokenKind::PENPOS => pen_position_update(tokens),
             _ => Err(format!("Unexpected token: {:?}", token)),
         }
     } else {

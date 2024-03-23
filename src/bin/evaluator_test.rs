@@ -1,13 +1,14 @@
 use std::collections::HashMap;
 use crate::parse_test;
-use parse_test::{AstNode, Binop, Boolop, Compop};
+use parse_test::{AstNode, Binop, Boolop, Compop, PenPos};
 
 #[allow(unused)]
+#[derive(Debug)]
 pub struct Position {
     x_coordinate: f32,
     y_coordinate: f32,
     color: f32,
-    heading: f32,
+    direction: f32,
 }
 
 #[derive(Debug)]
@@ -19,7 +20,7 @@ pub enum Value {
 #[allow(unused)]
 pub struct Evaluator {
     environment: HashMap<String, Value>,
-    turtle : Position,
+    current_position : Position,
 }
 
 
@@ -30,11 +31,11 @@ impl Evaluator {
     pub fn new() -> Self {
         Self {
             environment: HashMap::new(),
-            turtle: Position {
+            current_position: Position {
                 x_coordinate: 0.0,
                 y_coordinate: 0.0,
                 color: 0.0,
-                heading: 0.0,
+                direction: 0.0,
             } 
         }
     }
@@ -44,10 +45,14 @@ impl Evaluator {
         
         for node in ast {
             match node {
-                AstNode::MakeOp { var, expr } => self.make_eval(var, &expr), 
+                AstNode::MakeOp { var, expr } => self.make_eval(var, &expr),
+                AstNode::PenPosUpdate { update_type, value } => self.set_position(&update_type, &value),
                 _ => todo!(),
             }
         }
+
+        println!("{:?}", self.environment);
+        println!("{:?}", self.current_position);
     }
 
 
@@ -123,7 +128,21 @@ impl Evaluator {
             Compop::GT => left_val > right_val,
         }
     }
-   
+    
+    // Position Setter
+    fn set_position(&mut self, update_type: &PenPos, value: &AstNode ) {
+       
+        let val = self.eval_numeric_expression(value);
+        
+        match update_type {
+            PenPos::SETX => self.current_position.x_coordinate = val,
+            PenPos::SETY => self.current_position.y_coordinate = val,
+            PenPos::SETHEADING => self.current_position.direction = val,
+            PenPos::TURN => self.current_position.direction += val,
+        }
+    
+    }
+
     // Eval Boolean Operations (AND, OR)
     // Bool args must return a bool
     fn eval_bool_op(&mut self, operator: &Boolop, left: &AstNode, right: &AstNode) -> bool {
@@ -168,7 +187,7 @@ impl Evaluator {
         
         // Add binding to map
         self.environment.insert(var, assign_val);
-        println!("{:?}", self.environment);
+    
     }
 
 

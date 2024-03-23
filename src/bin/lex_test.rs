@@ -22,7 +22,6 @@ pub enum TokenKind {
     PENSTATUS,
     PENCOLOR,
     PENPOS,
-    PENANGLE,
     QUERY,
     PROCSTART,
     PROCEND,
@@ -67,13 +66,13 @@ fn to_token(input: &str) -> Token {
         // Pen Position / Orientation
         "SETX" => Token { kind: TokenKind::PENPOS, value: input.to_string() },
         "SETY" => Token { kind: TokenKind::PENPOS, value: input.to_string() },
-        "TURN" => Token { kind: TokenKind::PENANGLE, value: input.to_string() },
-        "SETHEADING" => Token { kind: TokenKind::PENANGLE, value: input.to_string() },
+        "TURN" => Token { kind: TokenKind::PENPOS, value: input.to_string() },
+        "SETHEADING" => Token { kind: TokenKind::PENPOS, value: input.to_string() },
         // Queries
         "XCOR" => Token { kind: TokenKind::QUERY, value: input.to_string() },
         "YCOR" => Token { kind: TokenKind::QUERY, value: input.to_string() },
         "HEADING" => Token { kind: TokenKind::QUERY, value: input.to_string() },
-        "COLOR" => Token { kind: TokenKind::PENANGLE, value: input.to_string() },
+        "COLOR" => Token { kind: TokenKind::PENCOLOR, value: input.to_string() },
         // If Statements
         "IF" => Token { kind: TokenKind::IFSTMNT, value: input.to_string() },
         // While statements
