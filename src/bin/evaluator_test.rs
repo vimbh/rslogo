@@ -16,7 +16,6 @@ pub struct Position {
 pub enum Value {
     Float(f32),
     Bool(bool),
-    Int(u8),
 }
 
 #[allow(unused)]
@@ -215,6 +214,8 @@ impl Evaluator {
         }
     }
 
+    // Bind a variable to a value
+    // args must return a float or bool
     fn make_eval(&mut self, var: String, expr: &AstNode ) {
         
         let assign_val = match expr {
