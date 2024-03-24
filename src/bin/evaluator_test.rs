@@ -22,7 +22,7 @@ pub enum Value {
 pub struct Evaluator {
     environment: HashMap<String, Value>,
     current_position : Position,
-    current_color: u8,
+    current_color: usize,
     currently_drawing: bool,
 }
 
@@ -45,14 +45,17 @@ impl Evaluator {
     }
 
     // Root Eval function
-    pub fn evaluate(&mut self, ast: Vec<AstNode>) {
+    pub fn evaluate(&mut self, ast: &mut Vec<AstNode>) {
         
         for node in ast {
             match node {
-                AstNode::MakeOp { var, expr } => self.make_eval(var, &expr),
+                AstNode::MakeOp { var, expr } => self.make_eval(var.to_string(), &expr),
                 AstNode::PenPosUpdate { update_type, value } => self.set_position(&update_type, &value),
-                AstNode::PenStatusUpdate(new_drawing_status) => self.set_drawing_status(new_drawing_status),
+                AstNode::PenStatusUpdate(new_drawing_status) => self.set_drawing_status(*new_drawing_status),
                 AstNode::PenColorUpdate(new_pen_color) => self.set_pen_color(&new_pen_color),
+                AstNode::IfStatement{ condition, body } => self.eval_if_statement(&condition, body),
+                AstNode::WhileStatement{ condition, body } => self.eval_while_statement(&condition, body),
+
                 _ => todo!(),
             }
         }
@@ -65,7 +68,30 @@ impl Evaluator {
     }
 
 
-    // Helper fn: evaluates any expr that could return a float (Num, Variable ref, Query)
+    // Evaluate if statement
+    fn eval_if_statement(&mut self, condition: &AstNode, body: &mut Vec<AstNode>) {
+       
+        let condition_is_true = self.eval_bool_expression(condition); 
+        
+        if condition_is_true {
+            self.evaluate(body);
+        }
+
+    }
+    
+    // Evaluate while statement
+    fn eval_while_statement(&mut self, condition: &AstNode, body: &mut Vec<AstNode>) {
+       
+        let condition_is_true = self.eval_bool_expression(&condition); 
+        
+        if condition_is_true {
+            self.evaluate(body);
+            self.eval_while_statement(&condition, body);
+        }
+
+    }
+
+    // Helper fn: evaluates any expr that could return a float (Num, Variable ref, Query, BinOp)
     fn eval_numeric_expression(&mut self, node: &AstNode) -> f32 {
         
         match node {
@@ -76,12 +102,13 @@ impl Evaluator {
                     _ => panic!("Variable {} is bound to a Boolean value, not a Float.", var),
                 }
             },
+            AstNode::BinaryOp { operator, left, right } => self.eval_binary_op(&operator, &left, &right),
             AstNode::Query(query_kind) => self.query(&query_kind),
             _ => panic!("Value not recognised"),
         }
     }
 
-    // Helper fn: evaluates any expr that could return a float (Num, Variable ref)
+    // Helper fn: evaluates any expr that could return a bool (Variable ref, BoolOp, CompOp)
     fn eval_bool_expression(&mut self, node: &AstNode) -> bool {
         
         match node {
@@ -91,7 +118,9 @@ impl Evaluator {
                     _ => panic!("Variable {} is bound to a Float value, not a Boolean.", var),
                 }
             }
-            _ => panic!("Value not recognised"),
+            AstNode::BooleanOp { operator, left, right } => self.eval_bool_op(&operator, &left, &right),
+            AstNode::ComparisonOp { operator, left, right } => self.eval_comp_op(&operator, &left, &right), 
+            _ => panic!("Expression passed does not evaluate to a bool"),
         }
     }
 
@@ -151,8 +180,8 @@ impl Evaluator {
         let float_val = self.eval_numeric_expression(value);
         
         // Check precision & bounds before casting to an int color
-        if float_val == (float_val as u8) as f32 && float_val >= 0.0 && float_val <= 15.0 {
-            self.current_color = float_val as u8;
+        if float_val == (float_val as usize) as f32 && float_val >= 0.0 && float_val <= 15.0 {
+            self.current_color = float_val as usize;
         } else {
             panic!("SETPENCOLOR requires an integer from 0..15 as an argument");
         };
