@@ -239,6 +239,38 @@ fn binary_op(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
     })
 }
 
+fn add_assign(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
+    // Consume the operator token
+    let operator_token = tokens.pop_front().ok_or("Expected AddAssign token")?;
+    if operator_token.kind != TokenKind::ADDASSIGN {
+        return Err(format!("Expected AddAssign operator token, found {:?}", operator_token.kind));
+    }
+    
+    // Parse the next token
+    let var = tokens.pop_front().ok_or("Expected variable")?;
+    if var.kind != TokenKind::IDENT {
+        return Err(format!("Addasign op expected a variable name, instead received: {:?}, of type {:?}", var.value, var.kind));
+    }
+
+    let val = expr(tokens)?;
+    // Val must return a float
+    match val {
+        AstNode::Num(_)
+            | AstNode::ComparisonOp { .. }
+            | AstNode::IdentRef(_)
+            | AstNode::Query(_) => {
+        }, 
+        _ => return Err(format!("<EXPR1> in WHILE <EXPR1> [<EXPR2>], must return a boolean")),
+    }   
+
+    
+    Ok(AstNode::AddAssign { 
+        var_name: var.value, 
+        expr: Box::new(val),
+    })
+
+}
+
 fn comparison_op(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
     // Consume the operator token
     let operator_token = tokens.pop_front().ok_or("Expected comparison operator token")?;
@@ -376,6 +408,7 @@ fn expr(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
             TokenKind::QUERY => query(tokens),
             TokenKind::IFSTMNT => if_statement(tokens),
             TokenKind::WHILESTMNT => while_statement(tokens),
+            TokenKind::ADDASSIGN => add_assign(tokens),
             _ => Err(format!("Unexpected token: {:?}", token)),
         }
     } else {

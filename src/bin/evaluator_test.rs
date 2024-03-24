@@ -1,7 +1,6 @@
 use core::{f32, panic};
 use std::collections::HashMap;
 use crate::parse_test;
-use nom::number::complete::float;
 use parse_test::{AstNode, Binop, Boolop, Compop, PenPos, QueryKind};
 
 #[allow(unused)]
@@ -16,6 +15,18 @@ pub struct Position {
 pub enum Value {
     Float(f32),
     Bool(bool),
+}
+
+impl std::ops::AddAssign for Value {
+
+    fn add_assign(&mut self, rhs: Self) {
+        match (self, rhs) {
+            (Value::Float(left), Value::Float(right)) => {
+                *left += right 
+            }
+            _ => panic!("Unsupported addition-assignment: Must be Value::Float()"),
+        }
+    }
 }
 
 #[allow(unused)]
@@ -55,6 +66,7 @@ impl Evaluator {
                 AstNode::PenColorUpdate(new_pen_color) => self.set_pen_color(&new_pen_color),
                 AstNode::IfStatement{ condition, body } => self.eval_if_statement(&condition, body),
                 AstNode::WhileStatement{ condition, body } => self.eval_while_statement(&condition, body),
+                AstNode::AddAssign{ var_name, expr } => self.eval_add_assign(&var_name, &expr),
 
                 _ => todo!(),
             }
@@ -90,6 +102,20 @@ impl Evaluator {
         }
 
     }
+
+    // AddAssign
+    fn eval_add_assign(&mut self, var_name: &String, expr: &AstNode) {
+     
+        
+        let value_to_add = Value::Float(self.eval_numeric_expression(expr));
+
+         self.environment
+            .entry(var_name.to_string())
+            .and_modify(|var| { *var += value_to_add });
+    
+    }
+
+
 
     // Helper fn: evaluates any expr that could return a float (Num, Variable ref, Query, BinOp)
     fn eval_numeric_expression(&mut self, node: &AstNode) -> f32 {
