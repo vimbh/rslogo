@@ -98,7 +98,7 @@ fn to_token(input: &str) -> Token {
         s if s.starts_with(':') && s[1..].chars().all(|c| c.is_alphanumeric()) => Token { kind: TokenKind::IDENTREF, value: s[1..].to_string() },
         // Addition Assignment
         "ADDASSIGN" => Token { kind: TokenKind::ADDASSIGN, value: input.to_string() },
-    _ => Token { kind: TokenKind::UNKNOWN, value: input.to_string() },
+        _ => Token { kind: TokenKind::UNKNOWN, value: input.to_string() },
     }
 
 
