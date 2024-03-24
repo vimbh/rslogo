@@ -121,14 +121,14 @@ fn to_token(input: &str) -> Token {
         }
 
         // Tokenize stream
-        let mut line_tokens = 
+        let mut tokenized_lines = 
             line
                 .split_whitespace()
                 .map(|word| to_token(word))
                 .collect::<VecDeque<Token>>();
         
 
-        tokens.append(&mut line_tokens);
+        tokens.append(&mut tokenized_lines);
     }
  
     Ok(tokens)  
