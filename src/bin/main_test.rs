@@ -25,10 +25,10 @@ fn main() {
             }
         }
     };
-    // println!("{:?}",&tokens);
+    println!("{:?}",&tokens);
     
     // Parse & generate AST
-    let ast = match parse(tokens) {
+    let mut ast = match parse(tokens) {
         Ok(ast) => ast,
         Err(e) => panic!("Error: {}", e),
     };
@@ -37,5 +37,5 @@ fn main() {
 
     // Loop nodes and evaluate
     let mut evaluator = Evaluator::new();
-    evaluator.evaluate(ast); 
+    evaluator.evaluate(&mut ast); 
 }
