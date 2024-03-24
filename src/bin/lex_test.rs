@@ -54,6 +54,8 @@ fn to_token(input: &str) -> Token {
         // Boolean Operators
         "AND" => Token { kind: TokenKind::BOOLOP, value: input.to_string() },
         "OR" => Token { kind: TokenKind::BOOLOP, value: input.to_string() },
+        // Addition Assignment
+        "ADDASSIGN" => Token { kind: TokenKind::ADDASSIGN, value: input.to_string() },
         // Directional Movement
         "FORWARD" => Token { kind: TokenKind::DIRECTION, value: input.to_string() },
         "BACK" => Token { kind: TokenKind::DIRECTION, value: input.to_string() },
@@ -80,10 +82,6 @@ fn to_token(input: &str) -> Token {
         // Brackets (For If / While statement blocks)
         "[" => Token { kind: TokenKind::LPAREN, value: input.to_string() },
         "]" => Token { kind: TokenKind::RPAREN, value: input.to_string() },
-        // Procedures
-        "TO" => Token { kind: TokenKind::PROCSTART, value: input.to_string() },
-        "END" => Token { kind: TokenKind::PROCEND, value: input.to_string() },
-        s if s.chars().all(|c| c.is_alphabetic()) => Token { kind: TokenKind::PROCNAME, value: s.to_string()},
         // Variables and Numbers
         s if s.starts_with('"') => {
             if let Ok(_) = s[1..].parse::<f32>() {
@@ -96,8 +94,11 @@ fn to_token(input: &str) -> Token {
         },
         // Variable Reference
         s if s.starts_with(':') && s[1..].chars().all(|c| c.is_alphanumeric()) => Token { kind: TokenKind::IDENTREF, value: s[1..].to_string() },
-        // Addition Assignment
-        "ADDASSIGN" => Token { kind: TokenKind::ADDASSIGN, value: input.to_string() },
+        // Procedures
+        "TO" => Token { kind: TokenKind::PROCSTART, value: input.to_string() },
+        "END" => Token { kind: TokenKind::PROCEND, value: input.to_string() },
+        s if s.chars().all(|c| c.is_alphabetic()) => Token { kind: TokenKind::PROCNAME, value: s.to_string()},
+
         _ => Token { kind: TokenKind::UNKNOWN, value: input.to_string() },
     }
 
