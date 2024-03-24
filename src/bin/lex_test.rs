@@ -113,13 +113,22 @@ fn to_token(input: &str) -> Token {
     let mut tokens = VecDeque::<Token>::new();
 
     for buf_line in file.lines() {
-        let mut line = buf_line?
-                        .split_whitespace()
-                        .map(|word| to_token(word))
-                        .collect::<VecDeque<Token>>();
+        let line = buf_line?;
+
+        // Ignore comments
+        if line.trim_start().starts_with("//") {
+            continue;
+        }
+
+        // Tokenize stream
+        let mut line_tokens = 
+            line
+                .split_whitespace()
+                .map(|word| to_token(word))
+                .collect::<VecDeque<Token>>();
         
 
-        tokens.append(&mut line);
+        tokens.append(&mut line_tokens);
     }
  
     Ok(tokens)  
