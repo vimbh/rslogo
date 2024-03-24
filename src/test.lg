@@ -5,9 +5,7 @@
 //SETX HEADING
 //MAKE "X + XCOR "5.2
 //SETPENCOLOR "15
-MAKE "X "5
 MAKE "Y "0
-WHILE LT :X "10 [
-  MAKE "X + "1 :X
-  MAKE "Y + :Y "0.1
+WHILE LT :Y "10 [
+  ADDASSIGN "Y "1
 ]
