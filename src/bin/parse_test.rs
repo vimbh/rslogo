@@ -79,8 +79,8 @@ pub enum AstNode {
     AddAssign { var_name: String, expr: Box<AstNode> },
     Ident(String),
     Num(f32),
-    IfStatement { operation: Box<AstNode>, body: Box<AstNode> },
-    WhileStatement { operation: Box<AstNode>, body: Box<AstNode> },
+    IfStatement { condition: Box<AstNode>, body: Box<Vec<AstNode>> },
+    WhileStatement { condition: Box<AstNode>, body: Box<Vec<AstNode>> },
     PenStatusUpdate(bool),
     PenColorUpdate(Box<AstNode>),
     PenPosUpdate { update_type: PenPos, value: Box<AstNode> },
@@ -101,6 +101,96 @@ pub fn parse(tokens: VecDeque<Token>) -> Result<Vec<AstNode>, String> {
     Ok(ast)
 }
 
+fn while_statement(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
+    let if_token = tokens.pop_front().ok_or("Expected 'WHILE' token")?;
+    if if_token.kind != TokenKind::WHILESTMNT {
+        return Err(format!("Expected 'WHILE' token, found {:?}", if_token.kind));
+    }
+    
+    
+    // Parse the following condition (some expression which returns a bool)
+    let condition = expr(tokens)?;
+    // SHOULD I BE HANDLING SYNTAX ERRORS HERE OR IN EVAL
+    match condition {
+        AstNode::BooleanOp { .. }
+            | AstNode::ComparisonOp { .. }
+            | AstNode::IdentRef(_) => {
+        }, 
+        _ => return Err(format!("<EXPR1> in WHILE <EXPR1> [<EXPR2>], must return a boolean")),
+    }
+    
+    // Parse body opening parenthesis
+    let l_paren_token = tokens.pop_front().ok_or("Expected '[' token")?;
+    if l_paren_token.kind != TokenKind::LPAREN {
+        return Err(format!("Expected '[' after 'IF' in IF <EXPR1> [<EXPR2>], found {:?}", l_paren_token.value));
+    }
+    
+    let mut body_tokens = Vec::<AstNode>::new();
+    
+    // Parse body until closing parenthesis is seen
+    while let Some(token) = tokens.front() {
+        if token.kind == TokenKind::RPAREN { 
+            break; 
+        }
+        body_tokens.push(expr(tokens)?);
+    }
+
+    let r_paren_token = tokens.pop_front().ok_or("Expected ']' token")?;
+    if r_paren_token.kind != TokenKind::RPAREN {
+        return Err(format!("Expected ']' after '<EXPR2>' in IF <EXPR1> [<EXPR2>], found {:?}", r_paren_token.kind));
+    }
+
+    Ok(AstNode::WhileStatement { 
+        condition: Box::new(condition), 
+        body: Box::new(body_tokens),  
+    })
+}
+
+fn if_statement(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
+    let if_token = tokens.pop_front().ok_or("Expected 'IF' token")?;
+    if if_token.kind != TokenKind::IFSTMNT {
+        return Err(format!("Expected 'IF' token, found {:?}", if_token.kind));
+    }
+    
+    
+    // Parse the following condition (some expression which returns a bool)
+    let condition = expr(tokens)?;
+    // SHOULD I BE HANDLING SYNTAX ERRORS HERE OR IN EVAL
+    match condition {
+        AstNode::BooleanOp { .. }
+            | AstNode::ComparisonOp { .. }
+            | AstNode::IdentRef(_) => {
+        }, 
+        _ => return Err(format!("<EXPR1> in IF <EXPR1> [<EXPR2>], must return a boolean")),
+    }
+    
+    // Parse body opening parenthesis
+    let l_paren_token = tokens.pop_front().ok_or("Expected '[' token")?;
+    if l_paren_token.kind != TokenKind::LPAREN {
+        return Err(format!("Expected '[' after 'IF' in IF <EXPR1> [<EXPR2>], found {:?}", l_paren_token.value));
+    }
+    
+    let mut body_tokens = Vec::<AstNode>::new();
+    
+    // Parse body until closing parenthesis is seen
+    while let Some(token) = tokens.front() {
+        if token.kind == TokenKind::RPAREN { 
+            break; 
+        }
+        body_tokens.push(expr(tokens)?);
+    }
+
+    let r_paren_token = tokens.pop_front().ok_or("Expected ']' token")?;
+    if r_paren_token.kind != TokenKind::RPAREN {
+        return Err(format!("Expected ']' after '<EXPR2>' in IF <EXPR1> [<EXPR2>], found {:?}", r_paren_token.kind));
+    }
+
+    Ok(AstNode::IfStatement { 
+        condition: Box::new(condition), 
+        body: Box::new(body_tokens),  
+    })
+}
+
 fn make_op(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
     // Consume 'Make' token
     let make_token = tokens.pop_front().ok_or("Expected 'Make' token")?;
@@ -110,10 +200,12 @@ fn make_op(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
     
     // Consume identifier token
     let ident_token = tokens.pop_front().ok_or("Expected identifier token after 'Make'")?;
-    if ident_token.kind != TokenKind::IDENT {
-        return Err(format!("Expected identifier token after 'Make', found {:?}", ident_token.kind));
+    match ident_token.kind {
+        TokenKind::IDENT | TokenKind::IDENTREF => {} // Continue
+        _ => return Err(format!("Expected identifier/reference to identifier token after 'Make', found {:?}", ident_token.kind))
+
     }
-    
+   
     // Parse the expression following the identifier
     let expr = expr(tokens)?;
     
@@ -282,6 +374,8 @@ fn expr(tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
             TokenKind::PENSTATUS => pen_status_update(tokens),
             TokenKind::PENCOLOR => pen_color_update(tokens),
             TokenKind::QUERY => query(tokens),
+            TokenKind::IFSTMNT => if_statement(tokens),
+            TokenKind::WHILESTMNT => while_statement(tokens),
             _ => Err(format!("Unexpected token: {:?}", token)),
         }
     } else {
