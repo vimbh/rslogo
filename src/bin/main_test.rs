@@ -3,7 +3,7 @@ mod lex_test;
 mod parse_test;
 mod evaluator_test;
 use lex_test::lexer;
-use parse_test::parse;
+use parse_test::Parser;
 use evaluator_test::Evaluator;
 
 
@@ -25,10 +25,11 @@ fn main() {
             }
         }
     };
-    println!("{:?}",&tokens);
+    //println!("{:?}",&tokens);
     
     // Parse & generate AST
-    let mut ast = match parse(tokens) {
+    let mut parser = Parser::new();
+    let mut ast = match parser.parse(tokens) {
         Ok(ast) => ast,
         Err(e) => panic!("Error: {}", e),
     };
