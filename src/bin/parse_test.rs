@@ -119,6 +119,10 @@ impl Parser {
         Ok(ast)
     }
     
+    // Another possible approach: Create the arg expression, and insert the binding of the param on
+    // the expression (requires keeping track of each procs argnames here, but saves evaluator)
+    // E.g. To Box "arg1 "arg2 Make "X "arg1 && Box "5 + "2 "3 -> { proc_name: 'Box', {MakeOp {var: "arg1",
+    // value: Num(5)} }, MakeOp { var: "arg2", value: BinOp { operator: '+', left: Num(2), right: Num(3)} } }
     // Procedure reference (any PROCNAME passed to fn expr() must be a reference to an existing procedure)
     pub fn procedure_reference(&mut self, tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
         let proc_name = tokens.pop_front().ok_or("Expected 'PROCNAME' token")?;
