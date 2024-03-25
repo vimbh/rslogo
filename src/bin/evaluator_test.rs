@@ -2,8 +2,9 @@ use core::{f32, panic};
 use std::collections::HashMap;
 use crate::parse_test;
 use parse_test::{AstNode, Binop, Boolop, Compop, PenPos, QueryKind};
+use std::rc::Rc;
+use std::borrow::BorrowMut;
 
-#[allow(unused)]
 #[derive(Debug)]
 pub struct Position {
     x_coordinate: f32,
@@ -12,13 +13,13 @@ pub struct Position {
 }
 
 #[derive(Debug)]
+#[derive(Clone)]
 pub enum Value {
     Float(f32),
     Bool(bool),
 }
 
 impl std::ops::AddAssign for Value {
-
     fn add_assign(&mut self, rhs: Self) {
         match (self, rhs) {
             (Value::Float(left), Value::Float(right)) => {
@@ -29,14 +30,14 @@ impl std::ops::AddAssign for Value {
     }
 }
 
-#[allow(unused)]
+
 pub struct Evaluator {
     environment: HashMap<String, Value>,
+    func_environment: HashMap<String, (Rc<Vec<String>>, Rc<Vec<AstNode>>)>, // Map each proc name to a list of its param names and a pointer to its executable body
     current_position : Position,
     current_color: usize,
     currently_drawing: bool,
 }
-
 
 
 impl Evaluator {
@@ -45,6 +46,7 @@ impl Evaluator {
     pub fn new() -> Self {
         Self {
             environment: HashMap::new(),
+            func_environment: HashMap::new(),
             current_position: Position {
                 x_coordinate: 0.0,
                 y_coordinate: 0.0,
@@ -55,9 +57,8 @@ impl Evaluator {
         }
     }
 
-    // Root Eval function
-    pub fn evaluate(&mut self, ast: &mut Vec<AstNode>) {
-        
+    // Root Eval function over AST
+    pub fn evaluate(&mut self, ast: &Vec<AstNode>) {
         for node in ast {
             match node {
                 AstNode::MakeOp { var, expr } => self.make_eval(var.to_string(), &expr),
@@ -67,23 +68,77 @@ impl Evaluator {
                 AstNode::IfStatement{ condition, body } => self.eval_if_statement(&condition, body),
                 AstNode::WhileStatement{ condition, body } => self.eval_while_statement(&condition, body),
                 AstNode::AddAssign{ var_name, expr } => self.eval_add_assign(&var_name, &expr),
+                AstNode::Procedure { name, args, body } => self.create_procedure(name.to_string(), Rc::clone(args), Rc::clone(body)),
+                AstNode::ProcedureReference { name_ref, args } => self.eval_procedure(&name_ref, args),
 
-                _ => todo!(),
+                _ => panic!("Unexpected error while evaluating AST tree: {:?}", node),
             }
         }
 
-        println!("{:?}", self.environment);
-        println!("{:?}", self.current_position);
-        println!("{:?}", self.currently_drawing);
-        println!("{:?}", self.current_color);
+        println!("{:?}\n", self.environment);
+        //println!("{:?\n}", self.current_position);
+        //println!("{:?\n}", self.currently_drawing);
+        //println!("{:?\n}", self.current_color);
+        println!("{:?\n}", self.func_environment);
 
     }
 
+    fn create_procedure(&mut self, name: String, parameters: Rc<Vec<String>>, body: Rc<Vec<AstNode>>) {
 
-    // Evaluate if statement
-    fn eval_if_statement(&mut self, condition: &AstNode, body: &mut Vec<AstNode>) {
+        // Add the args, with a default value, to the global environment
+        for param_name in parameters.iter() {
+            self.environment
+                .entry(param_name.to_string())
+                .or_insert(Value::Bool(false));
+        }
+
+        // Add the function, args and body to the func environment
+        self.func_environment.insert(name, (parameters, body));
+        
+    
+    }
+
+    // eval_procedure requires copies to avoid borrow conflicts between fetching values in the
+    // func_environment map and passing it's values to methods in the same instance.
+    // To reduce copy overhead, func_environment holds Rc's to the function params & body, 
+    // so we can take cheap clones of Rc to pass to our methods.
+    fn eval_procedure(&mut self, name_ref: &String, args: &Vec<AstNode>) {
+      
+        // Map the provided parameter values to the parameter variables
+        if let Some(values) = self.func_environment.get_mut(name_ref) {
+            let proc_params = Rc::clone(&values.0); 
+
+            for (param, arg) in proc_params.iter().zip(args.iter()) {
+
+                if let Ok(num_val) = self.eval_numeric_expression(arg) {
+                    self.environment
+                                .entry(param.to_string())
+                                .and_modify(|param| { *param = Value::Float(num_val) });
+                } else if let Ok(bool_val) = self.eval_bool_expression(arg) {
+                    self.environment
+                                .entry(param.to_string())
+                                .and_modify(|param| { *param = Value::Bool(bool_val) });
+                } else {
+                    panic!("Procedure argument does not return terminal value");
+                }
+
+            }
+
+        } else {
+            panic!("This proc does not exist: {}", name_ref);
+        };
+
+        let func_env_tuple = self.func_environment.get_mut(name_ref).expect("Already verified proc exists in func_environment");
+
+        let mut func_body_rc = Rc::clone(&func_env_tuple.1);
+        self.evaluate(func_body_rc.borrow_mut());
+  
+    
+    }
+
+    fn eval_if_statement(&mut self, condition: &AstNode, body: &Vec<AstNode>) {
        
-        let condition_is_true = self.eval_bool_expression(condition); 
+        let condition_is_true = self.eval_bool_expression(condition).unwrap(); 
         
         if condition_is_true {
             self.evaluate(body);
@@ -91,10 +146,9 @@ impl Evaluator {
 
     }
     
-    // Evaluate while statement
-    fn eval_while_statement(&mut self, condition: &AstNode, body: &mut Vec<AstNode>) {
+    fn eval_while_statement(&mut self, condition: &AstNode, body: &Vec<AstNode>) {
        
-        let condition_is_true = self.eval_bool_expression(&condition); 
+        let condition_is_true = self.eval_bool_expression(&condition).unwrap(); 
         
         if condition_is_true {
             self.evaluate(body);
@@ -103,65 +157,60 @@ impl Evaluator {
 
     }
 
-    // AddAssign
     fn eval_add_assign(&mut self, var_name: &String, expr: &AstNode) {
      
         
-        let value_to_add = Value::Float(self.eval_numeric_expression(expr));
+        let assign_value = Value::Float(self.eval_numeric_expression(expr).unwrap());
 
          self.environment
             .entry(var_name.to_string())
-            .and_modify(|var| { *var += value_to_add });
+            .and_modify(|var| { *var += assign_value });
     
     }
 
-
-
     // Helper fn: evaluates any expr that could return a float (Num, Variable ref, Query, BinOp)
-    fn eval_numeric_expression(&mut self, node: &AstNode) -> f32 {
+    fn eval_numeric_expression(&mut self, node: &AstNode) -> Result<f32, String> {
         
         match node {
-            AstNode::Num(val) => *val,
+            AstNode::Num(val) => Ok(*val),
             AstNode::IdentRef(var) => {
                 match self.eval_ref(&var) {
-                    &Value::Float(num) => num,
+                    &Value::Float(num) => Ok(num),
                     _ => panic!("Variable {} is bound to a Boolean value, not a Float.", var),
                 }
             },
-            AstNode::BinaryOp { operator, left, right } => self.eval_binary_op(&operator, &left, &right),
-            AstNode::Query(query_kind) => self.query(&query_kind),
+            AstNode::BinaryOp { operator, left, right } => Ok(self.eval_binary_op(&operator, &left, &right)),
+            AstNode::Query(query_kind) => Ok(self.query(&query_kind)),
             _ => panic!("Value not recognised"),
         }
     }
 
     // Helper fn: evaluates any expr that could return a bool (Variable ref, BoolOp, CompOp)
-    fn eval_bool_expression(&mut self, node: &AstNode) -> bool {
+    fn eval_bool_expression(&mut self, node: &AstNode) -> Result<bool, String> {
         
         match node {
             AstNode::IdentRef(var) => {
                 match self.eval_ref(&var) {
-                    &Value::Bool(value) => value,
+                    &Value::Bool(value) => Ok(value),
                     _ => panic!("Variable {} is bound to a Float value, not a Boolean.", var),
                 }
             }
-            AstNode::BooleanOp { operator, left, right } => self.eval_bool_op(&operator, &left, &right),
-            AstNode::ComparisonOp { operator, left, right } => self.eval_comp_op(&operator, &left, &right), 
+            AstNode::BooleanOp { operator, left, right } => Ok(self.eval_bool_op(&operator, &left, &right)),
+            AstNode::ComparisonOp { operator, left, right } => Ok(self.eval_comp_op(&operator, &left, &right)), 
             _ => panic!("Expression passed does not evaluate to a bool"),
         }
     }
 
-    // Eval Binary Operations (+, -, *, /)
-    // Binop args must return a num
     fn eval_binary_op(&mut self, operator: &Binop, left: &AstNode, right: &AstNode) -> f32 {
          
         let left_val = match left {
             AstNode::BinaryOp { operator, left, right } => self.eval_binary_op(&operator, &left, &right),
-            _ => self.eval_numeric_expression(left),
+            _ => self.eval_numeric_expression(left).unwrap(),
         };
 
         let right_val = match right {
             AstNode::BinaryOp { operator, left, right } => self.eval_binary_op(&operator, &left, &right),
-            _ => self.eval_numeric_expression(right),
+            _ => self.eval_numeric_expression(right).unwrap(),
         };
 
         match operator {
@@ -172,18 +221,16 @@ impl Evaluator {
         }
     }
    
-    // Eval Comparison Operations (EQ, NE, GT, LT)
-    // Comps args must return a num
     fn eval_comp_op(&mut self, operator: &Compop, left: &AstNode, right: &AstNode) -> bool {
           
         let left_val = match left {
             AstNode::BinaryOp { operator, left, right } => self.eval_binary_op(&operator, &left, &right),
-            _ => self.eval_numeric_expression(left),
+            _ => self.eval_numeric_expression(left).unwrap(),
         };
 
         let right_val = match right {
             AstNode::BinaryOp { operator, left, right } => self.eval_binary_op(&operator, &left, &right),
-            _ => self.eval_numeric_expression(right),
+            _ => self.eval_numeric_expression(right).unwrap(),
         };
         
         match operator {
@@ -194,16 +241,14 @@ impl Evaluator {
         }
     }
 
-    // Drawing status Setter
     fn set_drawing_status(&mut self, new_drawing_status: bool) {
         
         self.currently_drawing = new_drawing_status;
     }
  
-    // Pen color setter
     fn set_pen_color(&mut self, value: &AstNode) {
         
-        let float_val = self.eval_numeric_expression(value);
+        let float_val = self.eval_numeric_expression(value).unwrap();
         
         // Check precision & bounds before casting to an int color
         if float_val == (float_val as usize) as f32 && float_val >= 0.0 && float_val <= 15.0 {
@@ -214,10 +259,9 @@ impl Evaluator {
 
     }   
     
-    // Position Setter
     fn set_position(&mut self, update_type: &PenPos, value: &AstNode ) {
        
-        let val = self.eval_numeric_expression(value);
+        let val = self.eval_numeric_expression(value).unwrap();
         
         match update_type {
             PenPos::SETX => self.current_position.x_coordinate = val,
@@ -238,20 +282,18 @@ impl Evaluator {
         }
     }
 
-    // Eval Boolean Operations (AND, OR)
-    // Bool args must return a bool
     fn eval_bool_op(&mut self, operator: &Boolop, left: &AstNode, right: &AstNode) -> bool {
        
         let left_val = match left {
             AstNode::BooleanOp { operator, left, right } => self.eval_bool_op(&operator, &left, &right),
             AstNode::ComparisonOp { operator, left, right } => self.eval_comp_op(&operator, &left, &right),
-            _ => self.eval_bool_expression(left),
+            _ => self.eval_bool_expression(left).unwrap(),
         };
 
         let right_val = match right {
             AstNode::BooleanOp { operator, left, right } => self.eval_bool_op(&operator, &left, &right),
             AstNode::ComparisonOp { operator, left, right } => self.eval_comp_op(&operator, &left, &right),
-            _ => self.eval_bool_expression(right),
+            _ => self.eval_bool_expression(right).unwrap(),
         };
         
         match operator {
@@ -260,7 +302,6 @@ impl Evaluator {
         }
     }
     
-    // Retrieve a variables value
     fn eval_ref(&mut self, var: &String) -> &Value {
 
         match self.environment.get(var) {
@@ -269,8 +310,10 @@ impl Evaluator {
         }
     }
 
-    // Bind a variable to a value
-    // args must return a float or bool
+    fn eval_ref_as_val(&mut self, var: &String) -> Value {
+        self.eval_ref(&var).clone()       
+    }
+    
     fn make_eval(&mut self, var: String, expr: &AstNode ) {
         
         let assign_val = match expr {
@@ -279,9 +322,8 @@ impl Evaluator {
             AstNode::ComparisonOp { operator, left, right } => Value::Bool( self.eval_comp_op(&operator, &left, &right) ),
             AstNode::BooleanOp { operator, left, right } => Value::Bool( self.eval_bool_op(&operator, &left, &right) ),
             AstNode::Query(query_kind) => Value::Float( self.query(&query_kind) ),
-
-            //AstNode::VarRef
-            _ => todo!(),
+            AstNode::IdentRef(var) => self.eval_ref_as_val(&var), 
+            _ => todo!("make not imp"),
         };
         
         // Add binding to map
