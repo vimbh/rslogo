@@ -33,7 +33,7 @@ impl std::ops::AddAssign for Value {
 
 pub struct Evaluator {
     environment: HashMap<String, Value>,
-    func_environment: HashMap<String, (Rc<Vec<String>>, Rc<Vec<AstNode>>)>, // Map each proc name to a list of its param names and a pointer to its executable body
+    func_environment: HashMap<String, Rc<Vec<AstNode>>>, // Map each proc name to a list of its param names and a pointer to its executable body
     current_position : Position,
     current_color: usize,
     currently_drawing: bool,
@@ -68,7 +68,7 @@ impl Evaluator {
                 AstNode::IfStatement{ condition, body } => self.eval_if_statement(&condition, body),
                 AstNode::WhileStatement{ condition, body } => self.eval_while_statement(&condition, body),
                 AstNode::AddAssign{ var_name, expr } => self.eval_add_assign(&var_name, &expr),
-                AstNode::Procedure { name, args, body } => self.create_procedure(name.to_string(), Rc::clone(args), Rc::clone(body)),
+                AstNode::Procedure { name, body } => self.create_procedure(name.to_string(), Rc::clone(body)),
                 AstNode::ProcedureReference { name_ref, args } => self.eval_procedure(&name_ref, args),
 
                 _ => panic!("Unexpected error while evaluating AST tree: {:?}", node),
@@ -83,19 +83,11 @@ impl Evaluator {
 
     }
 
-    fn create_procedure(&mut self, name: String, parameters: Rc<Vec<String>>, body: Rc<Vec<AstNode>>) {
-
-        // Add the args, with a default value, to the global environment
-        for param_name in parameters.iter() {
-            self.environment
-                .entry(param_name.to_string())
-                .or_insert(Value::Bool(false));
-        }
+    fn create_procedure(&mut self, name: String, body: Rc<Vec<AstNode>>) {
 
         // Add the function, args and body to the func environment
-        self.func_environment.insert(name, (parameters, body));
+        self.func_environment.insert(name, body);
         
-    
     }
 
     // eval_procedure requires copies to avoid borrow conflicts between fetching values in the
@@ -103,36 +95,16 @@ impl Evaluator {
     // To reduce copy overhead, func_environment holds Rc's to the function params & body, 
     // so we can take cheap clones of Rc to pass to our methods.
     fn eval_procedure(&mut self, name_ref: &String, args: &Vec<AstNode>) {
-      
-        // Map the provided parameter values to the parameter variables
-        if let Some(values) = self.func_environment.get_mut(name_ref) {
-            let proc_params = Rc::clone(&values.0); 
-
-            for (param, arg) in proc_params.iter().zip(args.iter()) {
-
-                if let Ok(num_val) = self.eval_numeric_expression(arg) {
-                    self.environment
-                                .entry(param.to_string())
-                                .and_modify(|param| { *param = Value::Float(num_val) });
-                } else if let Ok(bool_val) = self.eval_bool_expression(arg) {
-                    self.environment
-                                .entry(param.to_string())
-                                .and_modify(|param| { *param = Value::Bool(bool_val) });
-                } else {
-                    panic!("Procedure argument does not return terminal value");
-                }
-
-            }
-
+        // Eval the args to bind the values
+        self.evaluate(args);
+        
+        // Run the func
+        if let Some(func_body) = self.func_environment.get_mut(name_ref) {
+            let mut func_body_rc = Rc::clone(&func_body);
+            self.evaluate(func_body_rc.borrow_mut());
         } else {
-            panic!("This proc does not exist: {}", name_ref);
-        };
-
-        let func_env_tuple = self.func_environment.get_mut(name_ref).expect("Already verified proc exists in func_environment");
-
-        let mut func_body_rc = Rc::clone(&func_env_tuple.1);
-        self.evaluate(func_body_rc.borrow_mut());
-  
+            panic!("proc named {} does not exist", name_ref);
+        }
     
     }
 

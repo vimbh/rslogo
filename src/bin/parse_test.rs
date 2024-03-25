@@ -85,7 +85,7 @@ pub enum AstNode {
     PenColorUpdate(Box<AstNode>),
     PenPosUpdate { update_type: PenPos, value: Box<AstNode> },
     Query(QueryKind),
-    Procedure { name: String, args: Rc<Vec<String>>, body: Rc<Vec<AstNode>> },
+    Procedure { name: String, body: Rc<Vec<AstNode>> },
     ProcedureReference{ name_ref: String, args: Rc<Vec<AstNode>> },
 }
 
@@ -94,8 +94,8 @@ pub enum AstNode {
 
 #[allow(unused)]
 pub struct Parser {
-    // Keep track of how many args an procedure has when defined
-    proc_arg_map: HashMap<String, usize>,
+    // Keep track of the parameter names for each procedure
+    proc_arg_map: HashMap<String, Rc<Vec<String>>>,
 }
 
 
@@ -119,39 +119,46 @@ impl Parser {
         Ok(ast)
     }
     
-    // Another possible approach: Create the arg expression, and insert the binding of the param on
-    // the expression (requires keeping track of each procs argnames here, but saves evaluator)
-    // E.g. To Box "arg1 "arg2 Make "X "arg1 && Box "5 + "2 "3 -> { proc_name: 'Box', {MakeOp {var: "arg1",
-    // value: Num(5)} }, MakeOp { var: "arg2", value: BinOp { operator: '+', left: Num(2), right: Num(3)} } }
-    // Procedure reference (any PROCNAME passed to fn expr() must be a reference to an existing procedure)
+    // When a procedure reference is made, directly bind the provided arguments to the functions
+    // parameters.
     pub fn procedure_reference(&mut self, tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
         let proc_name = tokens.pop_front().ok_or("Expected 'PROCNAME' token")?;
         if proc_name.kind != TokenKind::PROCNAME {
             return Err(format!("Expected 'PROCNAME' token, found {:?}", proc_name.kind));
         } 
 
-        let mut args = Vec::<AstNode>::new();
+        let mut arg_list = Vec::<AstNode>::new();
 
         // The type of args to procedures cannot be verified until the evaluation stage
         // as their use cases in the body are yet to be verified. Handle errors in evaluator
-        if let Some(&num_args) = self.proc_arg_map.get(&proc_name.value) {
-            for _ in 0..num_args {
-                args.push(self.expr(tokens)?);
-            }
-        } else {
-            panic!("The provided procedure name: {}, does not exist", proc_name.value);
-        } 
-
+        let param_list = match self.proc_arg_map.get(&proc_name.value) {
+            Some(value) => value,
+            None => panic!("proc name doesn't exist"),
+        };
+        
+        let param_list_rc = Rc::clone(param_list);
+        
+        for i in 0..param_list_rc.len() {
+            let arg_value = self.expr(tokens)?;
+            arg_list.push({
+                AstNode::MakeOp { 
+                    var: param_list_rc
+                        .get(i)
+                        .expect("Looping within the bounds of arg_rc by definition")
+                        .to_string(),
+                    expr: Box::new(arg_value),
+                }
+            });
+        }
 
         Ok(AstNode::ProcedureReference { 
             name_ref: proc_name.value,
-            args: Rc::new(args),
+            args: Rc::new(arg_list),
         })
 
     }
 
 
-    // Procedure
     pub fn procedure(&mut self, tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
         let start_token = tokens.pop_front().ok_or("Expected 'TO' token")?;
         if start_token.kind != TokenKind::PROCSTART {
@@ -191,12 +198,11 @@ impl Parser {
             return Err(format!("Expected PROCEND token, instead found {:?}", end_token.kind));
         }
 
-        // Add arg_token count to proc_arg_map
-        self.proc_arg_map.insert(proc_name_token.value.clone(), arg_tokens.len());
+        // Add parameter list to proc_arg_map
+        self.proc_arg_map.insert(proc_name_token.value.clone(), Rc::new(arg_tokens));
 
         Ok(AstNode::Procedure { 
             name: proc_name_token.value, 
-            args: Rc::new(arg_tokens), 
             body: Rc::new(body_tokens),
         })
          

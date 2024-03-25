@@ -9,10 +9,10 @@
 //WHILE LT :Y "10 [
 //  ADDASSIGN "Y "1
 //]
-//TO Box "arg1 "arg2
-//  MAKE "Z + :arg1 :arg2
-//  MAKE "L :arg2
-//END
-//
-//MAKE "X "5
-//Box "3 :X
+TO Box "arg1 "arg2
+  MAKE "Z + :arg1 :arg2
+  MAKE "L :arg2
+END
+
+MAKE "X "5
+Box "3 :X

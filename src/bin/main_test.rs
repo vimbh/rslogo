@@ -25,7 +25,7 @@ fn main() {
             }
         }
     };
-    //println!("{:?}",&tokens);
+    println!("{:?}",&tokens);
     
     // Parse & generate AST
     let mut parser = Parser::new();
