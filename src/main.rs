@@ -1,15 +1,13 @@
-use clap::Parser;
+use clap::Parser as clapParser;
 //use unsvg::Image;
-//mod parser;
-//use parser::lexer;
-mod lexer;
-use lexer::lexer;
-mod parser;
-use parser::parse;
+use logolang_lib::{lexer, parser, interpreter};
+use lexer::tokenize;
+use parser::Parser;
+use interpreter::Interpreter;
 use std::io::ErrorKind;
 
 /// A simple program to parse four arguments using clap.
-#[derive(Parser)]
+#[derive(clapParser)]
 struct Args {
     /// Path to a file
     file_path: std::path::PathBuf,
@@ -31,7 +29,7 @@ fn main() -> Result<(), ()> {
     let file_path = args.file_path;
     
     // Generate Tokens, manage errors
-    let tokens = match lexer(file_path) {
+    let tokens = match tokenize(file_path) {
         Ok(tokens) => tokens,
         Err(e) => {
             match e.kind() {    
@@ -43,28 +41,22 @@ fn main() -> Result<(), ()> {
             }
         }
     };
-
+    println!("{:?}",&tokens);
+    
     // Parse & generate AST
-    let ast = match parse(tokens) {
+    let mut parser = Parser::new();
+    let mut ast = match parser.parse(tokens) {
         Ok(ast) => ast,
         Err(e) => panic!("Error: {}", e),
     };
 
     println!("{:?}", &ast);
 
+    // Loop nodes and evaluate
+    let mut interpreter = Interpreter::new();
+    interpreter.evaluate(&mut ast); 
 
 
-
-    todo!()
-
-
-
-//    let _image_path = args.image_path;
-//    let _height = args.height;
-//    let _width = args.width;
-//
-//    
-//
 //    let image = Image::new(width, height);
 //
 //    match image_path.extension().map(|s| s.to_str()).flatten() {
@@ -87,6 +79,8 @@ fn main() -> Result<(), ()> {
 //            return Err(());
 //        }
 //    }
-//
-//    Ok(())
+
+
+    Ok(())
 }
+

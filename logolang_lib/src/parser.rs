@@ -1,23 +1,7 @@
-#![allow(unused_imports)]
-#![allow(dead_code)]
-
-use std::io::{self, BufRead, BufReader, ErrorKind};
-use std::fs::File;
-use std::fmt;
-use std::error::Error;
 use std::rc::Rc;
-use nom::{
-    branch::alt,
-    bytes::complete::tag,
-    character::complete::{digit1, alpha1, multispace0},
-    combinator::{map,map_res},
-    sequence::{delimited, pair, preceded, tuple},
-    IResult,
-};
-use crate::lex_test::Token;
-use crate::lex_test::TokenKind;
 use std::collections::VecDeque;
 use std::collections::HashMap;
+use crate::lexer::{TokenKind, Token}; 
 
 ////////////////////// ENUMS FOR PARSE /////////////////////////////////
 
@@ -528,10 +512,7 @@ impl Parser {
 
 }
 
-#[allow(dead_code)]
-fn main() {
 
-}
 
 
 

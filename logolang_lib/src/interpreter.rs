@@ -1,9 +1,8 @@
-use core::{f32, panic};
+//use core::{f32, panic};
 use std::collections::HashMap;
-use crate::parse_test;
-use parse_test::{AstNode, Binop, Boolop, Compop, PenPos, QueryKind};
 use std::rc::Rc;
 use std::borrow::BorrowMut;
+use crate::parser::{AstNode, Binop, Boolop, Compop, PenPos, QueryKind};
 
 #[derive(Debug)]
 pub struct Position {
@@ -31,7 +30,7 @@ impl std::ops::AddAssign for Value {
 }
 
 
-pub struct Evaluator {
+pub struct Interpreter {
     environment: HashMap<String, Value>,
     func_environment: HashMap<String, Rc<Vec<AstNode>>>, // Map each proc name to a list of its param names and a pointer to its executable body
     current_position : Position,
@@ -40,7 +39,7 @@ pub struct Evaluator {
 }
 
 
-impl Evaluator {
+impl Interpreter {
 
     // Constructor
     pub fn new() -> Self {

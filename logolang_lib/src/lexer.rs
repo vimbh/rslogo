@@ -2,7 +2,6 @@ use std::io::{self, BufReader, BufRead};
 use std::fs::File;
 use std::collections::VecDeque;
 
-mod lex_test {}
 #[derive(Debug, PartialEq)]
 pub enum TokenKind {
     MAKEOP,
@@ -29,7 +28,6 @@ pub enum TokenKind {
 }
 
 #[derive(Debug)]
-#[allow(unused)]
 pub struct Token {
     pub kind: TokenKind,
     pub value: String,
@@ -105,7 +103,8 @@ fn to_token(input: &str) -> Token {
 
 }
 
- pub fn lexer(file_path: &str) -> io::Result<VecDeque<Token>> {
+ // Lex input stream into tokens
+ pub fn tokenize(file_path: std::path::PathBuf) -> io::Result<VecDeque<Token>> {
   
     let file = BufReader::new(
                         File::open(file_path)?
@@ -134,28 +133,3 @@ fn to_token(input: &str) -> Token {
  
     Ok(tokens)  
 } 
-
-#[allow(dead_code)]
-fn main() {}
-
-//fn main() {
-//
-//    let file_path = "./src/test.lg";
-//   
-//    let tokens = match lexer(file_path) {
-//        Ok(tokens) => tokens,
-//        Err(e) => {
-//            match e.kind() {
-//                ErrorKind::NotFound => panic!("Error: File not found"),
-//                ErrorKind::PermissionDenied => panic!("Error: Permission to file denied"),
-//                ErrorKind::InvalidData => panic!("Nnvalid (non utf-8) character encountered file"),
-//                // Generic handling of other IO errors
-//                _ => panic!("Error: {}", e),
-//            }
-//        }
-//    };
-//   
-//    println!("{:?}", tokens); 
-//   
-//    
-//}
