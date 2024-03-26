@@ -1,8 +1,9 @@
-//use core::{f32, panic};
+use core::panic;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::borrow::BorrowMut;
-use crate::parser::{AstNode, Binop, Boolop, Compop, PenPos, QueryKind};
+use crate::parser::{AstNode, Binop, Boolop, Compop, PenPos, QueryKind, Direction};
+use unsvg::{Image, COLORS, get_end_coordinates};
 
 #[derive(Debug)]
 pub struct Position {
@@ -30,7 +31,8 @@ impl std::ops::AddAssign for Value {
 }
 
 
-pub struct Interpreter {
+pub struct Interpreter<'a> {
+    image: &'a mut Image,
     environment: HashMap<String, Value>,
     func_environment: HashMap<String, Rc<Vec<AstNode>>>, // Map each proc name to a list of its param names and a pointer to its executable body
     current_position : Position,
@@ -39,11 +41,12 @@ pub struct Interpreter {
 }
 
 
-impl Interpreter {
+impl <'a>Interpreter<'a> {
 
     // Constructor
-    pub fn new() -> Self {
+    pub fn new(image: &'a mut Image) -> Self {
         Self {
+            image,
             environment: HashMap::new(),
             func_environment: HashMap::new(),
             current_position: Position {
@@ -54,6 +57,13 @@ impl Interpreter {
             current_color: 7, // Starts default w_hite
             currently_drawing: false, // Starts default penup (not drawing)  
         }
+    }
+
+    pub fn run(&mut self, ast: &Vec<AstNode>) -> Result<&Image, String> {
+        self.evaluate(ast);
+        // Return image on success 
+        println!("Success!");
+        Ok(self.image)
     }
 
     // Root Eval function over AST
@@ -69,10 +79,12 @@ impl Interpreter {
                 AstNode::AddAssign{ var_name, expr } => self.eval_add_assign(&var_name, &expr),
                 AstNode::Procedure { name, body } => self.create_procedure(name.to_string(), Rc::clone(body)),
                 AstNode::ProcedureReference { name_ref, args } => self.eval_procedure(&name_ref, args),
+                AstNode::DrawInstruction { direction, num_pixels } => self.draw_line(&direction, num_pixels),
 
                 _ => panic!("Unexpected error while evaluating AST tree: {:?}", node),
             }
         }
+
 
         println!("{:?}\n", self.environment);
         //println!("{:?\n}", self.current_position);
@@ -82,6 +94,55 @@ impl Interpreter {
 
     }
 
+    fn get_relative_direction(&mut self, direction: &Direction) -> i32 {
+
+        match direction {
+            Direction::FORWARD => self.current_position.direction as i32,
+            Direction::BACK => self.current_position.direction as i32 + 180,
+            Direction::LEFT => self.current_position.direction as i32 - 90,
+            Direction::RIGHT => self.current_position.direction as i32 + 90,
+        }
+
+    }
+    
+    fn draw_line(&mut self, direction: &Direction, value: &AstNode) {
+        
+        let num_pixels = self.eval_numeric_expression(value).unwrap();
+        let adjusted_direction = self.get_relative_direction(direction); 
+        
+        if self.currently_drawing {
+
+            let res_pair  = self.image.draw_simple_line(
+                self.current_position.x_coordinate,
+                self.current_position.y_coordinate,
+                adjusted_direction,
+                num_pixels,
+                COLORS[self.current_color]
+                ); 
+
+            match res_pair {
+                Ok(res_pair) => { 
+                    (self.current_position.x_coordinate, 
+                     self.current_position.y_coordinate) = res_pair; 
+                },
+                Err(error) => panic!("error drawing line, {:?}", error), 
+            };        
+
+       } else { 
+            // Update coordinates without drawing
+            let res_pair = get_end_coordinates(
+                self.current_position.x_coordinate,
+                self.current_position.y_coordinate,
+                adjusted_direction, 
+                num_pixels);
+       
+            (self.current_position.x_coordinate, self.current_position.y_coordinate) = res_pair;
+       };
+
+
+        dbg!(&self.current_position);
+    }
+ 
     fn create_procedure(&mut self, name: String, body: Rc<Vec<AstNode>>) {
 
         // Add the function, args and body to the func environment
@@ -139,7 +200,7 @@ impl Interpreter {
     
     }
 
-    // Helper fn: evaluates any expr that could return a float (Num, Variable ref, Query, BinOp)
+    // get_relative_direction fn: evaluates any expr that could return a float (Num, Variable ref, Query, BinOp)
     fn eval_numeric_expression(&mut self, node: &AstNode) -> Result<f32, String> {
         
         match node {
@@ -156,7 +217,7 @@ impl Interpreter {
         }
     }
 
-    // Helper fn: evaluates any expr that could return a bool (Variable ref, BoolOp, CompOp)
+    // get_relative_direction fn: evaluates any expr that could return a bool (Variable ref, BoolOp, CompOp)
     fn eval_bool_expression(&mut self, node: &AstNode) -> Result<bool, String> {
         
         match node {
@@ -216,7 +277,8 @@ impl Interpreter {
         
         self.currently_drawing = new_drawing_status;
     }
- 
+
+
     fn set_pen_color(&mut self, value: &AstNode) {
         
         let float_val = self.eval_numeric_expression(value).unwrap();
