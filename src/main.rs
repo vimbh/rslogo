@@ -1,19 +1,11 @@
 use clap::Parser as clapParser;
 use unsvg::Image;
-use logolang_lib::{interpreter, lexer::{self, LexerError}, parser};
+use logolang_lib::{interpreter, lexer, parser};
+use logolang_lib::logolang_errors::ImgFileError;
 use lexer::tokenize;
 use parser::Parser;
 use interpreter::Interpreter;
 use anyhow::Result;
-use thiserror::Error;
-
-
-#[derive(Debug, Error)]
-pub enum ImgFileError {
-    #[error("Provided image file extension is not supported, could not save image. Please use .svg or .png")]
-    UnsupportedFileExtension,
-}
-
 
 /// A simple program to parse four arguments using clap.
 #[derive(clapParser)]

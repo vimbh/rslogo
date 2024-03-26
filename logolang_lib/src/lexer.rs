@@ -1,17 +1,18 @@
 use std::io::{self, BufReader, BufRead};
 use std::fs::File;
 use std::collections::VecDeque;
-use thiserror::Error;
+//use thiserror::Error;
 use anyhow::Result;
+use crate::logolang_errors::LexerError; 
 
-#[derive(Debug, Error)]
-pub enum LexerError {
-    #[error("Failed to lex input file: '{0}' is not a valid token")]
-    InvalidTokenError(String),
-
-    #[error("Error while trying to read file")]
-    IoError(#[from] io::Error),
-}
+//#[derive(Debug, Error)]
+//pub enum LexerError {
+//    #[error("Failed to lex input file: '{0}' is not a valid token")]
+//    InvalidTokenError(String),
+//
+//    #[error("Error while trying to read file")]
+//    IoError(#[from] io::Error),
+//}
 
 #[derive(Debug, PartialEq)]
 pub enum TokenKind {
