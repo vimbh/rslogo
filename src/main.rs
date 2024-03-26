@@ -45,7 +45,7 @@ fn main() -> Result<()> {
     
     // Parse & generate AST
     let mut parser = Parser::new();
-    let mut ast = match parser.parse(tokens) {
+    let ast = match parser.parse(tokens) {
         Ok(ast) => ast,
         Err(e) => panic!("Error: {}", e),
     };
@@ -56,11 +56,12 @@ fn main() -> Result<()> {
 
     // Loop nodes and evaluate
     let mut interpreter = Interpreter::new(&mut empty_image);
-    let drawing = interpreter.run(&mut ast); 
+    let drawing = interpreter.run(&ast); 
     
     if let Ok(image) = drawing {
 
-        match image_path.extension().map(|s| s.to_str()).flatten() {
+        //match image_path.extension().map(|s| s.to_str()).flatten() {
+        match image_path.extension().and_then(|s| s.to_str()) {
             Some("svg") => {
                 let res = image.save_svg(&image_path);
                 if let Err(e) = res {

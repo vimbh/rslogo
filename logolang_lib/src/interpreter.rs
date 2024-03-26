@@ -70,16 +70,16 @@ impl <'a>Interpreter<'a> {
     pub fn evaluate(&mut self, ast: &Vec<AstNode>) {
         for node in ast {
             match node {
-                AstNode::MakeOp { var, expr } => self.make_eval(var.to_string(), &expr),
-                AstNode::PenPosUpdate { update_type, value } => self.set_position(&update_type, &value),
+                AstNode::MakeOp { var, expr } => self.make_eval(var.to_string(), expr),
+                AstNode::PenPosUpdate { update_type, value } => self.set_position(update_type, value),
                 AstNode::PenStatusUpdate(new_drawing_status) => self.set_drawing_status(*new_drawing_status),
-                AstNode::PenColorUpdate(new_pen_color) => self.set_pen_color(&new_pen_color),
-                AstNode::IfStatement{ condition, body } => self.eval_if_statement(&condition, body),
-                AstNode::WhileStatement{ condition, body } => self.eval_while_statement(&condition, body),
-                AstNode::AddAssign{ var_name, expr } => self.eval_add_assign(&var_name, &expr),
+                AstNode::PenColorUpdate(new_pen_color) => self.set_pen_color(new_pen_color),
+                AstNode::IfStatement{ condition, body } => self.eval_if_statement(condition, body),
+                AstNode::WhileStatement{ condition, body } => self.eval_while_statement(condition, body),
+                AstNode::AddAssign{ var_name, expr } => self.eval_add_assign(var_name, expr),
                 AstNode::Procedure { name, body } => self.create_procedure(name.to_string(), Rc::clone(body)),
-                AstNode::ProcedureReference { name_ref, args } => self.eval_procedure(&name_ref, args),
-                AstNode::DrawInstruction { direction, num_pixels } => self.draw_line(&direction, num_pixels),
+                AstNode::ProcedureReference { name_ref, args } => self.eval_procedure(name_ref, args),
+                AstNode::DrawInstruction { direction, num_pixels } => self.draw_line(direction, num_pixels),
 
                 _ => panic!("Unexpected error while evaluating AST tree: {:?}", node),
             }
@@ -160,7 +160,7 @@ impl <'a>Interpreter<'a> {
         
         // Run the func
         if let Some(func_body) = self.func_environment.get_mut(name_ref) {
-            let mut func_body_rc = Rc::clone(&func_body);
+            let mut func_body_rc = Rc::clone(func_body);
             self.evaluate(func_body_rc.borrow_mut());
         } else {
             panic!("proc named {} does not exist", name_ref);
@@ -180,11 +180,11 @@ impl <'a>Interpreter<'a> {
     
     fn eval_while_statement(&mut self, condition: &AstNode, body: &Vec<AstNode>) {
        
-        let condition_is_true = self.eval_bool_expression(&condition).unwrap(); 
+        let condition_is_true = self.eval_bool_expression(condition).unwrap(); 
         
         if condition_is_true {
             self.evaluate(body);
-            self.eval_while_statement(&condition, body);
+            self.eval_while_statement(condition, body);
         }
 
     }
@@ -206,13 +206,13 @@ impl <'a>Interpreter<'a> {
         match node {
             AstNode::Num(val) => Ok(*val),
             AstNode::IdentRef(var) => {
-                match self.eval_ref(&var) {
+                match self.eval_ref(var) {
                     &Value::Float(num) => Ok(num),
                     _ => panic!("Variable {} is bound to a Boolean value, not a Float.", var),
                 }
             },
-            AstNode::BinaryOp { operator, left, right } => Ok(self.eval_binary_op(&operator, &left, &right)),
-            AstNode::Query(query_kind) => Ok(self.query(&query_kind)),
+            AstNode::BinaryOp { operator, left, right } => Ok(self.eval_binary_op(operator, left, right)),
+            AstNode::Query(query_kind) => Ok(self.query(query_kind)),
             _ => panic!("Value not recognised"),
         }
     }
@@ -222,13 +222,13 @@ impl <'a>Interpreter<'a> {
         
         match node {
             AstNode::IdentRef(var) => {
-                match self.eval_ref(&var) {
+                match self.eval_ref(var) {
                     &Value::Bool(value) => Ok(value),
                     _ => panic!("Variable {} is bound to a Float value, not a Boolean.", var),
                 }
             }
-            AstNode::BooleanOp { operator, left, right } => Ok(self.eval_bool_op(&operator, &left, &right)),
-            AstNode::ComparisonOp { operator, left, right } => Ok(self.eval_comp_op(&operator, &left, &right)), 
+            AstNode::BooleanOp { operator, left, right } => Ok(self.eval_bool_op(operator, left, right)),
+            AstNode::ComparisonOp { operator, left, right } => Ok(self.eval_comp_op(operator, left, right)), 
             _ => panic!("Expression passed does not evaluate to a bool"),
         }
     }
@@ -236,12 +236,12 @@ impl <'a>Interpreter<'a> {
     fn eval_binary_op(&mut self, operator: &Binop, left: &AstNode, right: &AstNode) -> f32 {
          
         let left_val = match left {
-            AstNode::BinaryOp { operator, left, right } => self.eval_binary_op(&operator, &left, &right),
+            AstNode::BinaryOp { operator, left, right } => self.eval_binary_op(operator, left, right),
             _ => self.eval_numeric_expression(left).unwrap(),
         };
 
         let right_val = match right {
-            AstNode::BinaryOp { operator, left, right } => self.eval_binary_op(&operator, &left, &right),
+            AstNode::BinaryOp { operator, left, right } => self.eval_binary_op(operator, left, right),
             _ => self.eval_numeric_expression(right).unwrap(),
         };
 
@@ -256,12 +256,12 @@ impl <'a>Interpreter<'a> {
     fn eval_comp_op(&mut self, operator: &Compop, left: &AstNode, right: &AstNode) -> bool {
           
         let left_val = match left {
-            AstNode::BinaryOp { operator, left, right } => self.eval_binary_op(&operator, &left, &right),
+            AstNode::BinaryOp { operator, left, right } => self.eval_binary_op(operator, left, right),
             _ => self.eval_numeric_expression(left).unwrap(),
         };
 
         let right_val = match right {
-            AstNode::BinaryOp { operator, left, right } => self.eval_binary_op(&operator, &left, &right),
+            AstNode::BinaryOp { operator, left, right } => self.eval_binary_op(operator, left, right),
             _ => self.eval_numeric_expression(right).unwrap(),
         };
         
@@ -284,7 +284,7 @@ impl <'a>Interpreter<'a> {
         let float_val = self.eval_numeric_expression(value).unwrap();
         
         // Check precision & bounds before casting to an int color
-        if float_val == (float_val as usize) as f32 && float_val >= 0.0 && float_val <= 15.0 {
+        if float_val == (float_val as usize) as f32 && (0.0..=15.0).contains(&float_val) {
             self.current_color = float_val as usize;
         } else {
             panic!("SETPENCOLOR requires an integer from 0..15 as an argument");
@@ -318,14 +318,14 @@ impl <'a>Interpreter<'a> {
     fn eval_bool_op(&mut self, operator: &Boolop, left: &AstNode, right: &AstNode) -> bool {
        
         let left_val = match left {
-            AstNode::BooleanOp { operator, left, right } => self.eval_bool_op(&operator, &left, &right),
-            AstNode::ComparisonOp { operator, left, right } => self.eval_comp_op(&operator, &left, &right),
+            AstNode::BooleanOp { operator, left, right } => self.eval_bool_op(operator, left, right),
+            AstNode::ComparisonOp { operator, left, right } => self.eval_comp_op(operator, left, right),
             _ => self.eval_bool_expression(left).unwrap(),
         };
 
         let right_val = match right {
-            AstNode::BooleanOp { operator, left, right } => self.eval_bool_op(&operator, &left, &right),
-            AstNode::ComparisonOp { operator, left, right } => self.eval_comp_op(&operator, &left, &right),
+            AstNode::BooleanOp { operator, left, right } => self.eval_bool_op(operator, left, right),
+            AstNode::ComparisonOp { operator, left, right } => self.eval_comp_op(operator, left, right),
             _ => self.eval_bool_expression(right).unwrap(),
         };
         
@@ -344,18 +344,18 @@ impl <'a>Interpreter<'a> {
     }
 
     fn eval_ref_as_val(&mut self, var: &String) -> Value {
-        self.eval_ref(&var).clone()       
+        self.eval_ref(var).clone()       
     }
     
     fn make_eval(&mut self, var: String, expr: &AstNode ) {
         
         let assign_val = match expr {
             AstNode::Num(val) => Value::Float( *val ),
-            AstNode::BinaryOp { operator, left, right } => Value::Float( self.eval_binary_op(&operator, &left, &right) ),
-            AstNode::ComparisonOp { operator, left, right } => Value::Bool( self.eval_comp_op(&operator, &left, &right) ),
-            AstNode::BooleanOp { operator, left, right } => Value::Bool( self.eval_bool_op(&operator, &left, &right) ),
-            AstNode::Query(query_kind) => Value::Float( self.query(&query_kind) ),
-            AstNode::IdentRef(var) => self.eval_ref_as_val(&var), 
+            AstNode::BinaryOp { operator, left, right } => Value::Float( self.eval_binary_op(operator, left, right) ),
+            AstNode::ComparisonOp { operator, left, right } => Value::Bool( self.eval_comp_op(operator, left, right) ),
+            AstNode::BooleanOp { operator, left, right } => Value::Bool( self.eval_bool_op(operator, left, right) ),
+            AstNode::Query(query_kind) => Value::Float( self.query(query_kind) ),
+            AstNode::IdentRef(var) => self.eval_ref_as_val(var), 
             _ => todo!("make not imp"),
         };
         

@@ -101,7 +101,7 @@ fn to_token(input: &str) -> Result<Token, LexerError> {
         "]" => Ok(Token { kind: TokenKind::RPAREN, value: input.to_string() }),
         // Variables and Numbers
         s if s.starts_with('"') => {
-            if let Ok(_) = s[1..].parse::<f32>() {
+            if s[1..].parse::<f32>().is_ok() {
                 Ok(Token { kind: TokenKind::NUM, value: s[1..].to_string() })
             } else if s[1..].chars().all(|c| c.is_alphanumeric()) {
                 Ok(Token { kind: TokenKind::IDENT, value: s[1..].to_string() })
@@ -152,7 +152,7 @@ fn to_token(input: &str) -> Result<Token, LexerError> {
         let mut tokenized_lines = 
             line
                 .split_whitespace()
-                .map(|word| to_token(word))
+                .map(to_token)
                 .collect::<Result<VecDeque<_>, _>>()?;
 
         tokens.append(&mut tokenized_lines);

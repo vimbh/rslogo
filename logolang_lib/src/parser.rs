@@ -83,10 +83,14 @@ pub struct Parser {
     proc_arg_map: HashMap<String, Rc<Vec<String>>>,
 }
 
+impl Default for Parser {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl Parser {
 
-    // Constructor
     pub fn new() -> Self {
         Self {
             proc_arg_map: HashMap::new(),
@@ -97,7 +101,7 @@ impl Parser {
         let mut tokens = tokens;
         let mut ast = Vec::new();
         
-        while let Some(_) = tokens.front() {
+        while tokens.front().is_some() {
             ast.push(self.expr(&mut tokens)?);
         }
         
@@ -208,7 +212,7 @@ impl Parser {
                 | AstNode::ComparisonOp { .. }
                 | AstNode::IdentRef(_) => {
             }, 
-            _ => return Err(format!("<EXPR1> in WHILE <EXPR1> [<EXPR2>], must return a boolean")),
+            _ => return Err("<EXPR1> in WHILE <EXPR1> [<EXPR2>], must return a boolean".to_string()),
         }
         
         // Parse body opening parenthesis
@@ -253,7 +257,7 @@ impl Parser {
                 | AstNode::ComparisonOp { .. }
                 | AstNode::IdentRef(_) => {
             }, 
-            _ => return Err(format!("<EXPR1> in IF <EXPR1> [<EXPR2>], must return a boolean")),
+            _ => return Err("<EXPR1> in IF <EXPR1> [<EXPR2>], must return a boolean".to_string()),
         }
         
         // Parse body opening parenthesis
@@ -352,7 +356,7 @@ impl Parser {
                 | AstNode::IdentRef(_)
                 | AstNode::Query(_) => {
             }, 
-            _ => return Err(format!("<EXPR1> in WHILE <EXPR1> [<EXPR2>], must return a boolean")),
+            _ => return Err("<EXPR1> in WHILE <EXPR1> [<EXPR2>], must return a boolean".to_string()),
         }   
 
         
@@ -495,7 +499,7 @@ impl Parser {
                 | AstNode::Query(_)
                 | AstNode::BinaryOp { .. }=> {
             }, 
-            _ => return Err(format!("<EXPR1> in WHILE <EXPR1> [<EXPR2>], must return a boolean")),
+            _ => return Err("<EXPR1> in WHILE <EXPR1> [<EXPR2>], must return a boolean".to_string()),
         }
 
         Ok(AstNode::DrawInstruction {
