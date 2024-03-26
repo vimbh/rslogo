@@ -1,7 +1,6 @@
 use std::io;
 use thiserror::Error;
 
-
 // Error for incorrect file path extensions
 #[derive(Debug, Error)]
 pub enum ImgFileError {
@@ -18,5 +17,3 @@ pub enum LexerError {
     #[error("Error while trying to read file")]
     IoError(#[from] io::Error),
 }
-
-

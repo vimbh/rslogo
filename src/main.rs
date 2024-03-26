@@ -1,11 +1,11 @@
-use clap::Parser as clapParser;
-use unsvg::Image;
-use logolang_lib::{interpreter, lexer, parser};
-use logolang_lib::logolang_errors::ImgFileError;
-use lexer::tokenize;
-use parser::Parser;
-use interpreter::Interpreter;
 use anyhow::Result;
+use clap::Parser as clapParser;
+use interpreter::Interpreter;
+use lexer::tokenize;
+use logolang_lib::logolang_errors::ImgFileError;
+use logolang_lib::{interpreter, lexer, parser};
+use parser::Parser;
+use unsvg::Image;
 
 /// A simple program to parse four arguments using clap.
 #[derive(clapParser)]
@@ -23,7 +23,6 @@ struct Args {
     width: u32,
 }
 
-
 fn main() -> Result<()> {
     let args: Args = Args::parse();
     // Access the parsed arguments
@@ -31,18 +30,16 @@ fn main() -> Result<()> {
     let image_path = args.image_path;
     let image_width = args.width;
     let image_height = args.height;
-    
+
     // Generate Tokens, manage errors
     let tokens = match tokenize(file_path) {
         Ok(tokens) => tokens,
         Err(e) => {
-  
             return Err(e.into());
-        },
-
+        }
     };
-    println!("{:?}",&tokens);
-    
+    println!("{:?}", &tokens);
+
     // Parse & generate AST
     let mut parser = Parser::new();
     let ast = match parser.parse(tokens) {
@@ -56,10 +53,9 @@ fn main() -> Result<()> {
 
     // Loop nodes and evaluate
     let mut interpreter = Interpreter::new(&mut empty_image);
-    let drawing = interpreter.run(&ast); 
-    
-    if let Ok(image) = drawing {
+    let drawing = interpreter.run(&ast);
 
+    if let Ok(image) = drawing {
         //match image_path.extension().map(|s| s.to_str()).flatten() {
         match image_path.extension().and_then(|s| s.to_str()) {
             Some("svg") => {
@@ -81,9 +77,7 @@ fn main() -> Result<()> {
                 return Err(ImgFileError::UnsupportedFileExtension.into());
             }
         }
-
-   }
+    }
 
     Ok(())
 }
-
