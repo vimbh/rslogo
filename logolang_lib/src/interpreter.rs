@@ -254,10 +254,10 @@ impl<'a> Interpreter<'a> {
         };
 
         match operator {
-            Binop::Add => left_val + right_val,
-            Binop::Sub => left_val - right_val,
-            Binop::Mul => left_val * right_val,
-            Binop::Div => left_val / right_val,
+            Binop::ADD => left_val + right_val,
+            Binop::SUB => left_val - right_val,
+            Binop::MUL => left_val * right_val,
+            Binop::DIV => left_val / right_val,
         }
     }
 
