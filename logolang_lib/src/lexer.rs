@@ -1,19 +1,18 @@
-use std::io::{self, BufReader, BufRead};
+//! This module defines the representations and functions utilised for lexical analysis over the RSLOGO language; specifically, tokenizing
+//! input strings.
+//!
+//! It provides the `TokenKind` enum which defines the valid kinds of tokens, and
+//! the `Token` struct representing the binding of a tokens kind and value. As hinted by its name,
+//! the 'tokenize' function is used for tokenizing input from a file.
+
+use std::io::{BufReader, BufRead};
 use std::fs::File;
 use std::collections::VecDeque;
-//use thiserror::Error;
 use anyhow::Result;
 use crate::logolang_errors::LexerError; 
 
-//#[derive(Debug, Error)]
-//pub enum LexerError {
-//    #[error("Failed to lex input file: '{0}' is not a valid token")]
-//    InvalidTokenError(String),
-//
-//    #[error("Error while trying to read file")]
-//    IoError(#[from] io::Error),
-//}
 
+/// Represents the set of valid tokens in RSLOGO.
 #[derive(Debug, PartialEq)]
 pub enum TokenKind {
     MAKEOP,
@@ -25,7 +24,6 @@ pub enum TokenKind {
     IDENTREF,
     ADDASSIGN,
     NUM,
-    UNKNOWN,
     IFSTMNT,
     WHILESTMNT,
     LPAREN,
@@ -39,13 +37,22 @@ pub enum TokenKind {
     PROCNAME,
 }
 
+/// Representation of a single tokens kind and value.
 #[derive(Debug)]
 pub struct Token {
     pub kind: TokenKind,
     pub value: String,
 }
 
-// Return a Token object
+/// Converts an input string to a token.
+/// # Arguments
+///
+/// * `input` - The input string to convert to a token.
+///
+/// # Returns
+///
+/// A `Result` containing the converted token, or a `LexerError` if the input
+/// is not a valid token. 
 fn to_token(input: &str) -> Result<Token, LexerError> { 
     
     match input {
@@ -99,7 +106,7 @@ fn to_token(input: &str) -> Result<Token, LexerError> {
             } else if s[1..].chars().all(|c| c.is_alphanumeric()) {
                 Ok(Token { kind: TokenKind::IDENT, value: s[1..].to_string() })
             } else {
-                Ok(Token { kind: TokenKind::UNKNOWN, value: input.to_string() })
+                Err(LexerError::InvalidTokenError(input.to_string()))
             }
         },
         // Variable Reference
@@ -115,7 +122,16 @@ fn to_token(input: &str) -> Result<Token, LexerError> {
 
 }
 
- // Lex input stream into tokens
+/// Tokenizes the input from the provided file.
+///
+/// # Arguments
+///
+/// * `file_path` - The path to the input file.
+///
+/// # Returns
+///
+/// A [`anyhow::Result`] containing a [`VecDeque`] of tokens if successful, or a `LexerError`
+/// if an error occurs during tokenization.
  pub fn tokenize(file_path: std::path::PathBuf) -> Result<VecDeque<Token>, LexerError> {
   
     let file = BufReader::new(
