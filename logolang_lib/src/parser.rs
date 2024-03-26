@@ -71,6 +71,7 @@ pub enum AstNode {
     Query(QueryKind),
     Procedure { name: String, body: Rc<Vec<AstNode>> },
     ProcedureReference{ name_ref: String, args: Rc<Vec<AstNode>> },
+    DrawInstruction { direction: Direction, num_pixels: Box<AstNode> },
 }
 
 ///////////////// PARSER FUNCS /////////////////////////////////
@@ -117,7 +118,7 @@ impl Parser {
         // as their use cases in the body are yet to be verified. Handle errors in evaluator
         let param_list = match self.proc_arg_map.get(&proc_name.value) {
             Some(value) => value,
-            None => panic!("proc name doesn't exist"),
+            None => panic!("proc name doesn't exist, {}", proc_name.value),
         };
         
         let param_list_rc = Rc::clone(param_list);
@@ -482,6 +483,35 @@ impl Parser {
         ))
     }
 
+    fn draw_line(&mut self, tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
+        let direction_token = tokens.pop_front().ok_or("Expected Direction token")?;
+        
+        // Parse the following condition (some expression which returns a float)
+        let num_pixels_token = self.expr(tokens)?;
+
+        match num_pixels_token {
+            AstNode::Num(_)
+                | AstNode::IdentRef(_)
+                | AstNode::Query(_)
+                | AstNode::BinaryOp { .. }=> {
+            }, 
+            _ => return Err(format!("<EXPR1> in WHILE <EXPR1> [<EXPR2>], must return a boolean")),
+        }
+
+        Ok(AstNode::DrawInstruction {
+            direction: match direction_token.value.as_str() {
+                "FORWARD" => Direction::FORWARD,
+                "BACK" => Direction::BACK,
+                "LEFT" => Direction::LEFT,
+                "RIGHT" => Direction::RIGHT,
+                _ => return Err(format!("Unknown direction: {}", direction_token.value)),
+            // NTS: can i just _ => unreachable!()  for all of the matches in parse? bc doesnt lexer take care of this? 
+             },
+             num_pixels: Box::new(num_pixels_token),
+        })
+    }
+
+
 
     fn expr(&mut self, tokens: &mut VecDeque<Token>) -> Result<AstNode, String> {
         // Peek at current token
@@ -502,6 +532,7 @@ impl Parser {
                 TokenKind::ADDASSIGN => self.add_assign(tokens),
                 TokenKind::PROCSTART => self.procedure(tokens),
                 TokenKind::PROCNAME => self.procedure_reference(tokens),
+                TokenKind::DIRECTION => self.draw_line(tokens),
                 _ => Err(format!("Unexpected token: {:?}", token)),
             }
         } else {
