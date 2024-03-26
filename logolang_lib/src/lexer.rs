@@ -1,6 +1,17 @@
 use std::io::{self, BufReader, BufRead};
 use std::fs::File;
 use std::collections::VecDeque;
+use thiserror::Error;
+use anyhow::Result;
+
+#[derive(Debug, Error)]
+pub enum LexerError {
+    #[error("Failed to lex input file: '{0}' is not a valid token")]
+    InvalidTokenError(String),
+
+    #[error("Error while trying to read file")]
+    IoError(#[from] io::Error),
+}
 
 #[derive(Debug, PartialEq)]
 pub enum TokenKind {
@@ -34,77 +45,77 @@ pub struct Token {
 }
 
 // Return a Token object
-fn to_token(input: &str) -> Token { 
+fn to_token(input: &str) -> Result<Token, LexerError> { 
     
     match input {
         // Variable Binding
-        "MAKE" => Token { kind: TokenKind::MAKEOP, value: input.to_string() },
+        "MAKE" => Ok(Token { kind: TokenKind::MAKEOP, value: input.to_string() }),
         // Arith Binary Operations
-        "+" => Token { kind: TokenKind::BINOP, value: input.to_string() },
-        "-" => Token { kind: TokenKind::BINOP, value: input.to_string() },
-        "*" => Token { kind: TokenKind::BINOP, value: input.to_string() },
-        "/" => Token { kind: TokenKind::BINOP, value: input.to_string() },
+        "+" => Ok(Token { kind: TokenKind::BINOP, value: input.to_string() }),
+        "-" => Ok(Token { kind: TokenKind::BINOP, value: input.to_string() }),
+        "*" => Ok(Token { kind: TokenKind::BINOP, value: input.to_string() }),
+        "/" => Ok(Token { kind: TokenKind::BINOP, value: input.to_string() }),
         // Comparitive Operators
-        "EQ" => Token { kind: TokenKind::COMPOP, value: input.to_string() },
-        "NE" => Token { kind: TokenKind::COMPOP, value: input.to_string() },
-        "GT" => Token { kind: TokenKind::COMPOP, value: input.to_string() },
-        "LT" => Token { kind: TokenKind::COMPOP, value: input.to_string() },
+        "EQ" => Ok(Token { kind: TokenKind::COMPOP, value: input.to_string() }),
+        "NE" => Ok(Token { kind: TokenKind::COMPOP, value: input.to_string() }),
+        "GT" => Ok(Token { kind: TokenKind::COMPOP, value: input.to_string() }),
+        "LT" => Ok(Token { kind: TokenKind::COMPOP, value: input.to_string() }),
         // Boolean Operators
-        "AND" => Token { kind: TokenKind::BOOLOP, value: input.to_string() },
-        "OR" => Token { kind: TokenKind::BOOLOP, value: input.to_string() },
+        "AND" => Ok(Token { kind: TokenKind::BOOLOP, value: input.to_string() }),
+        "OR" => Ok(Token { kind: TokenKind::BOOLOP, value: input.to_string() }),
         // Addition Assignment
-        "ADDASSIGN" => Token { kind: TokenKind::ADDASSIGN, value: input.to_string() },
+        "ADDASSIGN" => Ok(Token { kind: TokenKind::ADDASSIGN, value: input.to_string() }),
         // Directional Movement
-        "FORWARD" => Token { kind: TokenKind::DIRECTION, value: input.to_string() },
-        "BACK" => Token { kind: TokenKind::DIRECTION, value: input.to_string() },
-        "RIGHT" => Token { kind: TokenKind::DIRECTION, value: input.to_string() },
-        "LEFT" => Token { kind: TokenKind::DIRECTION, value: input.to_string() },
+        "FORWARD" => Ok(Token { kind: TokenKind::DIRECTION, value: input.to_string() }),
+        "BACK" => Ok(Token { kind: TokenKind::DIRECTION, value: input.to_string() }),
+        "RIGHT" => Ok(Token { kind: TokenKind::DIRECTION, value: input.to_string() }),
+        "LEFT" => Ok(Token { kind: TokenKind::DIRECTION, value: input.to_string() }),
         // Pen Status
-        "PENUP" => Token { kind: TokenKind::PENSTATUS, value: input.to_string() },
-        "PENDOWN" => Token { kind: TokenKind::PENSTATUS, value: input.to_string() },
-        "SETPENCOLOR" => Token { kind: TokenKind::PENCOLOR, value: input.to_string() },
+        "PENUP" => Ok(Token { kind: TokenKind::PENSTATUS, value: input.to_string() }),
+        "PENDOWN" => Ok(Token { kind: TokenKind::PENSTATUS, value: input.to_string() }),
+        "SETPENCOLOR" => Ok(Token { kind: TokenKind::PENCOLOR, value: input.to_string() }),
         // Pen Position / Orientation
-        "SETX" => Token { kind: TokenKind::PENPOS, value: input.to_string() },
-        "SETY" => Token { kind: TokenKind::PENPOS, value: input.to_string() },
-        "TURN" => Token { kind: TokenKind::PENPOS, value: input.to_string() },
-        "SETHEADING" => Token { kind: TokenKind::PENPOS, value: input.to_string() },
+        "SETX" => Ok(Token { kind: TokenKind::PENPOS, value: input.to_string() }),
+        "SETY" => Ok(Token { kind: TokenKind::PENPOS, value: input.to_string() }),
+        "TURN" => Ok(Token { kind: TokenKind::PENPOS, value: input.to_string() }),
+        "SETHEADING" => Ok(Token { kind: TokenKind::PENPOS, value: input.to_string() }),
         // Queries
-        "XCOR" => Token { kind: TokenKind::QUERY, value: input.to_string() },
-        "YCOR" => Token { kind: TokenKind::QUERY, value: input.to_string() },
-        "HEADING" => Token { kind: TokenKind::QUERY, value: input.to_string() },
-        "COLOR" => Token { kind: TokenKind::QUERY, value: input.to_string() },
+        "XCOR" => Ok(Token { kind: TokenKind::QUERY, value: input.to_string() }),
+        "YCOR" => Ok(Token { kind: TokenKind::QUERY, value: input.to_string() }),
+        "HEADING" => Ok(Token { kind: TokenKind::QUERY, value: input.to_string() }),
+        "COLOR" => Ok(Token { kind: TokenKind::QUERY, value: input.to_string() }),
         // If Statements
-        "IF" => Token { kind: TokenKind::IFSTMNT, value: input.to_string() },
+        "IF" => Ok(Token { kind: TokenKind::IFSTMNT, value: input.to_string() }),
         // While statements
-        "WHILE" => Token { kind: TokenKind::WHILESTMNT, value: input.to_string() },
+        "WHILE" => Ok(Token { kind: TokenKind::WHILESTMNT, value: input.to_string() }),
         // Brackets (For If / While statement blocks)
-        "[" => Token { kind: TokenKind::LPAREN, value: input.to_string() },
-        "]" => Token { kind: TokenKind::RPAREN, value: input.to_string() },
+        "[" => Ok(Token { kind: TokenKind::LPAREN, value: input.to_string() }),
+        "]" => Ok(Token { kind: TokenKind::RPAREN, value: input.to_string() }),
         // Variables and Numbers
         s if s.starts_with('"') => {
             if let Ok(_) = s[1..].parse::<f32>() {
-                Token { kind: TokenKind::NUM, value: s[1..].to_string() }
+                Ok(Token { kind: TokenKind::NUM, value: s[1..].to_string() })
             } else if s[1..].chars().all(|c| c.is_alphanumeric()) {
-                Token { kind: TokenKind::IDENT, value: s[1..].to_string() }
+                Ok(Token { kind: TokenKind::IDENT, value: s[1..].to_string() })
             } else {
-                Token { kind: TokenKind::UNKNOWN, value: input.to_string() }
+                Ok(Token { kind: TokenKind::UNKNOWN, value: input.to_string() })
             }
         },
         // Variable Reference
-        s if s.starts_with(':') && s[1..].chars().all(|c| c.is_alphanumeric()) => Token { kind: TokenKind::IDENTREF, value: s[1..].to_string() },
+        s if s.starts_with(':') && s[1..].chars().all(|c| c.is_alphanumeric()) => Ok(Token { kind: TokenKind::IDENTREF, value: s[1..].to_string() }),
         // Procedures
-        "TO" => Token { kind: TokenKind::PROCSTART, value: input.to_string() },
-        "END" => Token { kind: TokenKind::PROCEND, value: input.to_string() },
-        s if s.chars().all(|c| c.is_alphabetic()) => Token { kind: TokenKind::PROCNAME, value: s.to_string()},
+        "TO" => Ok(Token { kind: TokenKind::PROCSTART, value: input.to_string() }),
+        "END" => Ok(Token { kind: TokenKind::PROCEND, value: input.to_string() }),
+        s if s.chars().all(|c| c.is_alphabetic()) => Ok(Token { kind: TokenKind::PROCNAME, value: s.to_string()}),
 
-        _ => Token { kind: TokenKind::UNKNOWN, value: input.to_string() },
+        _ => Err(LexerError::InvalidTokenError(input.to_string())),
     }
 
 
 }
 
  // Lex input stream into tokens
- pub fn tokenize(file_path: std::path::PathBuf) -> io::Result<VecDeque<Token>> {
+ pub fn tokenize(file_path: std::path::PathBuf) -> Result<VecDeque<Token>, LexerError> {
   
     let file = BufReader::new(
                         File::open(file_path)?
@@ -125,8 +136,7 @@ fn to_token(input: &str) -> Token {
             line
                 .split_whitespace()
                 .map(|word| to_token(word))
-                .collect::<VecDeque<Token>>();
-        
+                .collect::<Result<VecDeque<_>, _>>()?;
 
         tokens.append(&mut tokenized_lines);
     }

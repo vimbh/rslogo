@@ -1,10 +1,19 @@
 use clap::Parser as clapParser;
 use unsvg::Image;
-use logolang_lib::{lexer, parser, interpreter};
+use logolang_lib::{interpreter, lexer::{self, LexerError}, parser};
 use lexer::tokenize;
 use parser::Parser;
 use interpreter::Interpreter;
-use std::io::ErrorKind;
+use anyhow::Result;
+use thiserror::Error;
+
+
+#[derive(Debug, Error)]
+pub enum ImgFileError {
+    #[error("Provided image file extension is not supported, could not save image. Please use .svg or .png")]
+    UnsupportedFileExtension,
+}
+
 
 /// A simple program to parse four arguments using clap.
 #[derive(clapParser)]
@@ -23,7 +32,7 @@ struct Args {
 }
 
 
-fn main() -> Result<(), ()> {
+fn main() -> Result<()> {
     let args: Args = Args::parse();
     // Access the parsed arguments
     let file_path = args.file_path;
@@ -35,14 +44,10 @@ fn main() -> Result<(), ()> {
     let tokens = match tokenize(file_path) {
         Ok(tokens) => tokens,
         Err(e) => {
-            match e.kind() {    
-                ErrorKind::NotFound => panic!("Error: File not found"),
-                ErrorKind::PermissionDenied => panic!("Error: Permission to file denied"),
-                ErrorKind::InvalidData => panic!("Nnvalid (non utf-8) character encountered file"),
-                // Generic handling of other IO errors
-                _ => panic!("Error: {}", e),
-            }
-        }
+  
+            return Err(e.into());
+        },
+
     };
     println!("{:?}",&tokens);
     
@@ -68,19 +73,19 @@ fn main() -> Result<(), ()> {
                 let res = image.save_svg(&image_path);
                 if let Err(e) = res {
                     eprintln!("Error saving svg: {e}");
-                    return Err(());
+                    return Err(e.into());
                 }
             }
             Some("png") => {
                 let res = image.save_png(&image_path);
                 if let Err(e) = res {
                     eprintln!("Error saving png: {e}");
-                    return Err(());
+                    return Err(e.into());
                 }
             }
             _ => {
                 eprintln!("File extension not supported");
-                return Err(());
+                return Err(ImgFileError::UnsupportedFileExtension.into());
             }
         }
 

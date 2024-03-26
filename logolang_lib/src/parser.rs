@@ -222,7 +222,7 @@ impl Parser {
         // Parse body until closing parenthesis is seen
         while let Some(token) = tokens.front() {
             if token.kind == TokenKind::RPAREN { 
-                break; 
+                break;
             }
             body_tokens.push(self.expr(tokens)?);
         }
