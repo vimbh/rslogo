@@ -9,10 +9,30 @@
 //WHILE LT :Y "10 [
 //  ADDASSIGN "Y "1
 //]
-TO Box "arg1 "arg2
-  MAKE "Z + :arg1 :arg2
-  MAKE "L :arg2
+//TO Box "arg1 "arg2
+//  MAKE "Z + :arg1 :arg2
+//  BACK :Z
+//  RIGHT "5
+//END
+//
+//MAKE "X "5
+//Box "3 :X
+
+// Draw a Box
+TO Box "arg1
+  PENDOWN
+  RIGHT :arg1
+  BACK :arg1
+  SETHEADING "90
+  FORWARD :arg1
+  SETPENCOLOR "2
+  RIGHT :arg1
+  TURN "180
+  FORWARD :arg1
+  SETHEADING "0
+  FORWARD :arg1
 END
 
-MAKE "X "5
-Box "3 :X
+
+Box "40
+
