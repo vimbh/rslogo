@@ -1,5 +1,5 @@
 use clap::Parser as clapParser;
-//use unsvg::Image;
+use unsvg::Image;
 use logolang_lib::{lexer, parser, interpreter};
 use lexer::tokenize;
 use parser::Parser;
@@ -27,6 +27,9 @@ fn main() -> Result<(), ()> {
     let args: Args = Args::parse();
     // Access the parsed arguments
     let file_path = args.file_path;
+    let image_path = args.image_path;
+    let image_width = args.width;
+    let image_height = args.height;
     
     // Generate Tokens, manage errors
     let tokens = match tokenize(file_path) {
@@ -52,34 +55,36 @@ fn main() -> Result<(), ()> {
 
     println!("{:?}", &ast);
 
+    let mut empty_image = Image::new(image_width, image_height);
+
     // Loop nodes and evaluate
-    let mut interpreter = Interpreter::new();
-    interpreter.evaluate(&mut ast); 
+    let mut interpreter = Interpreter::new(&mut empty_image);
+    let drawing = interpreter.run(&mut ast); 
+    
+    if let Ok(image) = drawing {
 
+        match image_path.extension().map(|s| s.to_str()).flatten() {
+            Some("svg") => {
+                let res = image.save_svg(&image_path);
+                if let Err(e) = res {
+                    eprintln!("Error saving svg: {e}");
+                    return Err(());
+                }
+            }
+            Some("png") => {
+                let res = image.save_png(&image_path);
+                if let Err(e) = res {
+                    eprintln!("Error saving png: {e}");
+                    return Err(());
+                }
+            }
+            _ => {
+                eprintln!("File extension not supported");
+                return Err(());
+            }
+        }
 
-//    let image = Image::new(width, height);
-//
-//    match image_path.extension().map(|s| s.to_str()).flatten() {
-//        Some("svg") => {
-//            let res = image.save_svg(&image_path);
-//            if let Err(e) = res {
-//                eprintln!("Error saving svg: {e}");
-//                return Err(());
-//            }
-//        }
-//        Some("png") => {
-//            let res = image.save_png(&image_path);
-//            if let Err(e) = res {
-//                eprintln!("Error saving png: {e}");
-//                return Err(());
-//            }
-//        }
-//        _ => {
-//            eprintln!("File extension not supported");
-//            return Err(());
-//        }
-//    }
-
+   }
 
     Ok(())
 }
