@@ -17,7 +17,9 @@
 //
 //MAKE "X "5
 //Box "3 :X
-
+MAKE "X "5
+MAKE :sd "4
+MAKE "X MAKE
 // Draw a Box
 TO Box "arg1
   PENDOWN
