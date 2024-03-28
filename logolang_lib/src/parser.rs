@@ -1,8 +1,9 @@
 use crate::lexer::{Token, TokenKind};
-use anyhow::Result;
+use anyhow::{Result, Context};
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::rc::Rc;
+use std::string::ParseError;
 use thiserror::Error;
 
 ////////////////////// ENUMS FOR PARSE /////////////////////////////////
@@ -114,25 +115,55 @@ pub enum AstNode {
     },
 }
 
-// ERRORS /////////////////
 
+/// Defines the return type of an expression
+// is_boolean might seem redundant, but is needed to differentiate between
+// Nodes which implements neither, vs those which implement is_numeric.
+pub trait NodeType {
+    fn is_numeric(&self) -> bool {
+        false
+    }
+    fn is_boolean(&self) -> bool {
+        false
+    }
+}
+
+impl NodeType for AstNode {
+    fn is_numeric(&self) -> bool {
+        matches!(self, AstNode::Num(_) | AstNode::BinaryOp {..} | AstNode::Query(_)| AstNode::IdentRef(_))
+    }
+
+    fn is_boolean(&self) -> bool {
+        matches!(&self, AstNode::ComparisonOp {..} | AstNode::BooleanOp {..} | AstNode::IdentRef(_))
+    }
+}
+
+
+
+// Parser errors are SYNTACTIC errors, as opposed to SEMANTIC errors which are caught in the
+// interpreter.
 #[derive(Debug, Error)]
 pub enum ParserError {
-    #[error("Token missing in parsing expression. Please check that your programs expressions are well formed.")]
+    
+    // All <anyhow::Error> are cast to ParseError to catch the context chain
+    #[error("{0}")]
+    ParseError(String),
+
+    #[error("Unexpected ending  while parsing program.")]
     UnexpectedEnding,
 
-    #[error("Error on line {0}: {1}")]
-    MakeError(String, String),
 
+    #[error("\t[Line {0}]: Provided expression '{1}' will not return a float.\n")]
+    NonNumericExpr(String, String),
 
-    #[error("Ill-formed binary operation expression (+|-|*|/), arguments incorrect: {0}")]
-    IllformedBinop(String),
+    #[error("\t[Line {0}]: Provided expression '{1}' will not return a boolean.\n")]
+    NonBooleanExpr(String, String),
 
-    #[error("Ill-formed comparison operation expression (EQ|NE|GT|LT), arguments incorrect: {0}")]
-    IllformedCompop(String),
-
-    #[error("Error on line {0}: {1}")]
+    #[error("[Line {0}]: {1}")]   
     IncorrectArgType(String, String),
+    
+    #[error("[Line {0}]: {1}")]
+    InvalidToken(String, String),
 
     #[error("{0} expression is missing parenthesis: expected {1}, received {2}")]
     MissingParenthesis(String, String, String),
@@ -140,6 +171,13 @@ pub enum ParserError {
     #[error("Referenced procedure {0} does not exist.")]
     InvalidProcReference(String),
 
+}
+
+
+impl From<anyhow::Error> for ParserError {
+    fn from(error: anyhow::Error) -> Self {
+        ParserError::ParseError(format!("{:?}", error))
+    }
 }
 
 ///////////////// PARSER METHODS /////////////////////////////////
@@ -177,29 +215,36 @@ impl Parser {
     // Parses the tokens which form expressions in RSLOGO.
     fn expr(&mut self, tokens: &mut VecDeque<Token>) -> Result<AstNode, ParserError> {
         if let Some(token) = tokens.front() {
+            //dbg!(&token);
             match &token.kind {
-                TokenKind::MAKEOP => self.make_op(tokens),
+                // num_expressions
                 TokenKind::BINOP => self.binary_op(tokens),
-                TokenKind::COMPOP => self.comparison_op(tokens),
-                TokenKind::NUM => self.num(tokens),
-                TokenKind::IDENTREF => self.ident_ref(tokens),
-                TokenKind::BOOLOP => self.bool_op(tokens),
-                TokenKind::PENPOS => self.pen_position_update(tokens),
-                TokenKind::PENSTATUS => self.pen_status_update(tokens),
-                TokenKind::PENCOLOR => self.pen_color_update(tokens),
                 TokenKind::QUERY => self.query(tokens),
+                // bool_expressions
+                TokenKind::COMPOP => self.binary_op(tokens),
+                TokenKind::BOOLOP => self.binary_op(tokens),
+                // num or bool expression
+                TokenKind::IDENTREF => self.ident_ref(tokens),
+                // statements 
+                TokenKind::MAKEOP => self.make_op(tokens),
+                TokenKind::ADDASSIGN => self.add_assign(tokens),
+                TokenKind::DIRECTION => self.draw_line(tokens),
                 TokenKind::IFSTMNT => self.if_statement(tokens),
                 TokenKind::WHILESTMNT => self.while_statement(tokens),
-                TokenKind::ADDASSIGN => self.add_assign(tokens),
+                TokenKind::PENSTATUS => self.pen_status_update(tokens),
+                TokenKind::PENCOLOR => self.pen_color_update(tokens),
+                TokenKind::PENPOS => self.pen_position_update(tokens),
                 TokenKind::PROCSTART => self.procedure(tokens),
                 TokenKind::PROCNAME => self.procedure_reference(tokens),
-                TokenKind::DIRECTION => self.draw_line(tokens),
-                _ => unreachable!("No other tokens can be produced by the lexer"),
+                // Terminal                
+                TokenKind::NUM => self.num(tokens),
+                _ => Err(ParserError::InvalidToken(token.line.to_string(), format!("Variable '{0}' cannot be passed to this operation. Perhaps you meant :{0}?", token.value))),
             }
         } else {
             Err(ParserError::UnexpectedEnding)
         }
     }
+
 
     fn make_op(&mut self, tokens: &mut VecDeque<Token>) -> Result<AstNode, ParserError> {
         // Consume 'Make' token
@@ -207,24 +252,27 @@ impl Parser {
             .pop_front()
             .expect("Token must have been verified to be passed to fn");
 
-        // Consume identifier/identifier reference token
-        let ident_token = tokens.pop_front().ok_or_else(|| {
-            ParserError::MakeError(make_token.line.to_string(), "Make Expression did not receive a variable to assign to.".to_string(), )
-        })?;
-
-        match ident_token.kind {
-            TokenKind::IDENT | TokenKind::IDENTREF => {} // Continue
-            _ => {
-                return Err(ParserError::IncorrectArgType(
-                    ident_token.line.to_string(),
-                    "Make Expression must assign to a variable or variable reference.".to_string(),
-                )
-                .into());
-            }
+        // Consume next token
+        let ident_token = tokens
+            .pop_front()
+            .ok_or_else(|| { ParserError::UnexpectedEnding })?;
+    
+        // Verify identifier token
+        if let TokenKind::IDENT = ident_token.kind {
+            // Continue
+        } else {
+            return Err(ParserError::IncorrectArgType(
+                make_token.line.to_string(),
+                format!("Invalid MAKE expression. MAKE did not receive a variable, instead receieved: {}.", ident_token.value).to_string(),
+            )
+            .into());
         }
-
-        // Parse the next expression
-        let expr = self.expr(tokens)?;
+    
+        // Parse the expression which is bound to the identifier
+        let expr = self.expr(tokens)
+            .with_context(|| format!("\t[Line {}]: Invalid MAKE operation: Failed to parse expression provided to '{}'",
+                                     ident_token.line, 
+                                     ident_token.value))?;
 
         Ok(AstNode::MakeOp {
             var: ident_token.value,
@@ -232,49 +280,90 @@ impl Parser {
         })
     }
 
+
+    // A binary expression either returns a float or a bool.
     fn binary_op(&mut self, tokens: &mut VecDeque<Token>) -> Result<AstNode, ParserError> {
         // Consume the operator token
         let operator_token = tokens
             .pop_front()
             .expect("Token must have been verified to be passed to fn");
 
-        // Parse the left And right operands
-        let left = self.expr(tokens)?;
-        let right = self.expr(tokens)?;
+        let left = self.expr(tokens)
+            .with_context(|| format!("[Line{}]: The first argument to binary operator '{}' is invalid.",
+                                     operator_token.line, 
+                                     operator_token.value))?;
 
-        Ok(AstNode::BinaryOp {
-            operator: match operator_token.value.as_str() {
-                "+" => Binop::ADD,
-                "-" => Binop::SUB,
-                "*" => Binop::MUL,
-                "/" => Binop::DIV,
-                _ => unreachable!("Lexer only produces these binary operators"),
+        let right = self.expr(tokens)
+            .with_context(|| format!("[Line{}]: The second argument to binary operator '{}' is invalid",
+                                     operator_token.line, 
+                                     operator_token.value))?;
+        
+        // Check the validity of the provided expressions
+        match operator_token.kind {
+            TokenKind::BINOP => 
+            {
+                if !left.is_numeric() || !right.is_numeric() {
+                    return Err(ParserError::NonNumericExpr(operator_token.line.to_string(), operator_token.value.to_string()));
+                }   
             },
-            left: Box::new(left),
-            right: Box::new(right),
-        })
-    }
-
-    fn comparison_op(&mut self, tokens: &mut VecDeque<Token>) -> Result<AstNode, ParserError> {
-        // Consume the operator token
-        let operator_token = tokens
-            .pop_front()
-            .expect("Token must have been verified to be passed to fn");
-        // Parse the left And right operands
-        let left = self.expr(tokens)?;
-        let right = self.expr(tokens)?;
-
-        Ok(AstNode::ComparisonOp {
-            operator: match operator_token.value.as_str() {
-                "EQ" => Compop::EQ,
-                "NE" => Compop::NE,
-                "LT" => Compop::LT,
-                "GT" => Compop::GT,
-                _ => unreachable!("Lexer only produces these binary operators"),
+            // Note: if left and right are both IDENTREF's whos underlying values types are mismatched, they will not return an 
+            // error here, as they return true for both is_boolean() and is_numeric(). This is intended, as the parser only checks 
+            // for syntactic errors, while the interpreter will check for semantic errors.
+            TokenKind::COMPOP =>
+            {
+                if !(left.is_boolean() && right.is_boolean()) && !(left.is_numeric() && right.is_numeric()) {
+                    return Err(ParserError::NonBooleanExpr(operator_token.line.to_string(), operator_token.value.to_string()));                       }
             },
-            left: Box::new(left),
-            right: Box::new(right),
-        })
+            TokenKind::BOOLOP => 
+            {
+                if !left.is_boolean() || !right.is_boolean() {
+                    return Err(ParserError::NonBooleanExpr(operator_token.line.to_string(), operator_token.value.to_string()));
+                }
+            
+            },
+            _ => unreachable!("These are the only token kinds passed to the binary_op function"),
+        }
+
+        
+        match operator_token.kind {
+            TokenKind::BINOP => 
+                Ok(AstNode::BinaryOp {
+                    operator: match operator_token.value.as_str() {
+                        "+" => Binop::ADD,
+                        "-" => Binop::SUB,
+                        "*" => Binop::MUL,
+                        "/" => Binop::DIV,
+                        _ => unreachable!("Lexer only produces these binary operators"),
+                    },
+                    left: Box::new(left),
+                    right: Box::new(right),
+            }),
+            TokenKind::COMPOP =>
+                Ok(AstNode::ComparisonOp {
+                    operator: match operator_token.value.as_str() {
+                        "EQ" => Compop::EQ,
+                        "NE" => Compop::NE,
+                        "LT" => Compop::LT,
+                        "GT" => Compop::GT,
+                        _ => unreachable!("Lexer only produces these binary operators"),
+                    },
+                    left: Box::new(left),
+                    right: Box::new(right),
+            }),
+            TokenKind::BOOLOP => 
+                Ok(AstNode::BooleanOp {
+                    operator: match operator_token.value.as_str() {
+                        "AND" => Boolop::AND,
+                        "OR" => Boolop::OR,
+                        _ => unreachable!("Lexer only produces these binary operators"),
+                    },
+                    left: Box::new(left),
+                    right: Box::new(right),
+                }),
+            _ => unreachable!("fn binary_op only retrieves arguments of these types")
+
+        }        
+   
     }
 
     fn num(&mut self, tokens: &mut VecDeque<Token>) -> Result<AstNode, ParserError> {
@@ -296,27 +385,6 @@ impl Parser {
 
         let ident_value = ident_token.value;
         Ok(AstNode::IdentRef(ident_value))
-    }
-
-    fn bool_op(&mut self, tokens: &mut VecDeque<Token>) -> Result<AstNode, ParserError> {
-        // Consume the operator token
-        let operator_token = tokens
-            .pop_front()
-            .expect("Token must have been verified to be passed to fn");
-
-        // Parse the left And right operAnds
-        let left = self.expr(tokens)?;
-        let right = self.expr(tokens)?;
-
-        Ok(AstNode::BooleanOp {
-            operator: match operator_token.value.as_str() {
-                "AND" => Boolop::AND,
-                "OR" => Boolop::OR,
-                _ => unreachable!("Lexer only produces these binary operators"),
-            },
-            left: Box::new(left),
-            right: Box::new(right),
-        })
     }
 
     fn pen_position_update(
@@ -674,4 +742,6 @@ impl Parser {
             num_pixels: Box::new(num_pixels_token),
         })
     }
+
+
 }
