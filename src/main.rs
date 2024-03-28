@@ -47,7 +47,7 @@ fn main() -> Result<()> {
         Err(e) => panic!("Error: {}", e),
     };
 
-    println!("{:?}", &ast);
+    //println!("{:?}", &ast);
 
     let mut empty_image = Image::new(image_width, image_height);
 
