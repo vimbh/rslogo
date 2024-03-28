@@ -44,6 +44,7 @@ pub struct Token {
     pub line: i32,
 }
 
+
 /// Converts an input string to a token.
 /// # Arguments
 ///
