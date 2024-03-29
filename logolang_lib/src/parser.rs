@@ -238,8 +238,7 @@ impl Parser {
             return Err(ParserError::IncorrectArgType(
                 make_token.line.to_string(),
                 format!("Invalid MAKE expression. MAKE did not receive a variable, instead receieved: {}.", ident_token.value).to_string(),
-            )
-            .into());
+            ));
         }
 
         // Parse the expression which is bound to the identifier
