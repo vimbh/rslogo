@@ -38,7 +38,6 @@ fn main() -> Result<()> {
             return Err(e.into());
         }
     };
-    println!("{:?}", &tokens);
 
     // Parse & generate AST
     let mut parser = Parser::new();
@@ -47,7 +46,7 @@ fn main() -> Result<()> {
         Err(e) => panic!("Error: {}", e),
     };
 
-    //println!("{:?}", &ast);
+    //dbg!(&ast);
 
     let mut empty_image = Image::new(image_width, image_height);
 

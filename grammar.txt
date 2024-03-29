@@ -1,51 +1,51 @@
-
+## This defines RSLOGO's Context Free Grammar in BNF.
 
 <program> ::= <expression>+
             | <statement>+
             | <expression>+ <statement>+
             | <statement>+ <expression>+
             
-## Expressions return either float or bool values.
+## Expressions return either float or bool values, or are a raw string.
 <expression> ::= <num_expression>
-               | <bool_expression>
+               | <logic_expression>
+               | <word>
 
-
-<num_expression> ::= <binary_expression>
+<num_expression> ::= <arith_expression>
                    | <query_expression>
                    | <ident_ref>
                    | <Num>
 
-<bool_expression> ::= <comparison_expression> 
+<logic_expression> ::= <comparison_expression> 
                     | <boolean_expression>
                     | <ident_ref>
 
 ## Statements describe some state transformation.
-<statement> ::= <make_statement> 
-              | <add_assign_statement>
-              | <direction_statement> 
-              | <if_statement> 
-              | <while_statement>
+<statement> ::= <make> 
+              | <add_assign>
+              | <draw_instruction> 
+              | <if> 
+              | <while>
               | <pen_status_update> 
               | <pen_color_update> 
               | <pen_pos_update>
-              | <procedure_statement>
-              | <procedure_reference_statement>
+              | <procedure>
+              | <procedure_reference>
 
-<binary_expression> ::= <binary_operator> <num_expression> <num_expression>
+<arith_expression> ::= <arithmetic_operator> <num_expression> <num_expression>
 
 <comparison_expression> ::= <comparison_operator> <num_expression> <num_expression>
 
-<boolean_expression> ::= <boolean_operator> <bool_expression> <bool_expression>
+<logic_expression> ::= <boolean_operator> <boolean_expression> <boolean_expression>
 
 <query_expression> ::= <query_kind>
 
-<make_statement> ::= "MAKE" <identifier> <expression>
+<make> ::= "MAKE" <identifier> <expression>
 
-<add_assign_statement> ::= "ADDASSIGN" <identifier> <num_expression>
+<add_assign> ::= "ADDASSIGN" <identifier> <num_expression>
 
-<direction_statement> ::= <direction> <num_expression>
+<draw_instruction> ::= <direction> <num_expression>
 
-<if_expression> ::= "IF" <bool_expression> "[" <program> "]"
+<if_expression> ::= "IF" <logic_expression> "[" <program> "]"
 
 <while_expression> ::= "WHILE" <expression> "[" <program> "]"
 
@@ -53,11 +53,14 @@
 
 <pen_pos_update> ::= <pen_position> <num_expression>
 
-<procedure_statement> ::= "PROCEDURE" <identifier> <identifier>* <program> "PROCEND"
+<procedure> ::= "TO" <identifier> <identifier>* <program> "END"
 
 <procedure_reference_expression> ::= <identifier> <identifier>*
 
 ## Terminals
+<identifier> := String
+
+<word> := String
 
 <ident_ref> ::= <Num> 
               | <Bool>
@@ -71,11 +74,11 @@
 
 <direction> ::= "FORWARD" | "BACK" | "RIGHT" | "LEFT"
 
-<binary_operator> ::= "+" | "-" | "*" | "/"
+<arithmetic_operator> ::= "+" | "-" | "*" | "/"
 
-<comparisonerator> ::= "EQ" | "NE" | "LT" | "GT"
+<comparison_operator> ::= "EQ" | "NE" | "LT" | "GT"
 
-<booleanerator> ::= "AND" | "OR"
+<boolean_operator> ::= "AND" | "OR"
 
 <pen_position> ::= "SETX" | "SETY" | "SETHEADING" | "TURN"
 

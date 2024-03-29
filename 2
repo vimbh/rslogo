@@ -1,0 +1,557 @@
+use crate::parser::{AstNode, ArithOp, BoolOp, CompOp, Direction, PenPos, QueryKind};
+use crate::logolang_errors::InterpreterError;
+use anyhow::{Result, Context};
+use std::borrow::BorrowMut;
+use std::collections::HashMap;
+use std::rc::Rc;
+use unsvg::{get_end_coordinates, Image, COLORS};
+
+#[derive(Debug)]
+pub struct Position {
+    x_coordinate: f32,
+    y_coordinate: f32,
+    direction: f32,
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub enum Value {
+    Float(f32),
+    Bool(bool),
+    Word(String),
+}
+
+impl std::ops::AddAssign for Value {
+    fn add_assign(&mut self, rhs: Self) {
+        match (self, rhs) {
+            (Value::Float(left), Value::Float(right)) => *left += right,
+            _ => panic!("Unsupported addition-assignment: Must be Value::Float()"),
+        }
+    }
+}
+
+impl std::fmt::Display for Direction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Direction::FORWARD => write!(f, "FORWARD"),
+            Direction::BACK => write!(f, "BACK"),
+            Direction::RIGHT => write!(f, "RIGHT"),
+            Direction::LEFT => write!(f, "LEFT"),
+        }
+    }
+}
+
+impl std::fmt::Display for PenPos {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PenPos::SETX => write!(f, "SETX"),
+            PenPos::SETY => write!(f, "SETY"),
+            PenPos::SETHEADING => write!(f, "SETHEADING"),
+            PenPos::TURN => write!(f, "TURN"),
+        }
+    }
+}
+
+impl std::fmt::Display for ArithOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ArithOp::ADD => write!(f, "+"),
+            ArithOp::SUB => write!(f, "-"),
+            ArithOp::MUL => write!(f, "*"),
+            ArithOp::DIV => write!(f, "/"),
+        }
+    }
+}
+
+impl std::fmt::Display for CompOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CompOp::EQ => write!(f, "EQ"),
+            CompOp::NE => write!(f, "NE"),
+            CompOp::LT => write!(f, "LT"),
+            CompOp::GT => write!(f, "GT"),
+        }
+    }
+}
+
+impl std::fmt::Display for BoolOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BoolOp::AND => write!(f, "AND"),
+            BoolOp::OR => write!(f, "OR"),
+        }
+    }
+}
+
+pub struct Interpreter<'a> {
+    image: &'a mut Image,
+    environment: HashMap<String, Value>,
+    func_environment: HashMap<String, Rc<Vec<AstNode>>>, // Map each proc name to a list of its param names and a pointer to its executable body
+    current_position: Position,
+    current_color: usize,
+    currently_drawing: bool,
+}
+
+impl<'a> Interpreter<'a> {
+    // Constructor
+    pub fn new(image: &'a mut Image) -> Self {
+        Self {
+            image,
+            environment: HashMap::new(),
+            func_environment: HashMap::new(),
+            current_position: Position {
+                x_coordinate: 0.0,
+                y_coordinate: 0.0,
+                direction: 0.0,
+            },
+            current_color: 7,         // Starts default white
+            currently_drawing: false, // Starts default penup (not drawing)
+        }
+    }
+
+    // User facing run function
+    pub fn run(&mut self, ast: &Vec<AstNode>) -> Result<&Image, InterpreterError> {
+        self.evaluate(ast)
+            .with_context(|| "Failed to evaluate program".to_string())?;
+        dbg!(&self.environment);
+        // Return image on success
+        println!("Success!"); 
+        Ok(self.image)
+    }
+
+    // Traverse AST
+    pub fn evaluate(&mut self, ast: &Vec<AstNode>) -> Result<(), InterpreterError> {
+        for node in ast {
+            match node {
+                // Statement evaluation
+                AstNode::MakeStmnt { var, expr, line } => self.make(String::from(var), expr, line)?,
+                AstNode::AddAssign { var_name, expr } => self.add_assign(var_name, expr)?,
+                AstNode::DrawInstruction {
+                    direction,
+                    num_pixels,
+                } => self.draw_line(direction, num_pixels)?,
+                AstNode::IfStmnt { condition, body } => self.if_statement(condition, body)?,
+                AstNode::WhileStmnt { condition, body } => self.while_statement(condition, body)?,   
+                AstNode::PenStatusUpdate(new_drawing_status) => {
+                    self.set_drawing_status(*new_drawing_status);
+                },
+                AstNode::PenColorUpdate(new_pen_color) => self.set_pen_color(new_pen_color)?,
+                AstNode::PenPosUpdate { update_type, value } => self.set_position(update_type, value)?,
+                AstNode::Procedure { name, body } => {
+                    self.create_procedure(String::from(name), Rc::clone(body));
+                },
+                AstNode::ProcedureRef { name_ref, args } => {
+                    self.eval_procedure(name_ref, args)?
+                },
+                // Expressions that are evaluated here are stand alone expressions; that is,
+                // their results are not used in any operations. We evaluate non-terminal
+                // expressions for correctness, and return nothing for terminal expressions.
+                AstNode::ArithExpr { operator, left, right } => { 
+                   self.arith_expr(operator, left, right)?;
+                },
+                AstNode::Query(_) => (),
+                AstNode::IdentRef(_) => (),
+                AstNode::Num(_) => (),
+                AstNode::CompExpr { operator, left, right } => {
+                    self.comp_expr(operator, left, right)?;
+                },
+                AstNode::BoolExpr { operator, left, right } => {
+                    self.bool_expr(operator, left, right)?;
+                },
+                AstNode::Ident(_) => (),
+                // If an ident it received here, it is not bound: treat it as a raw string
+                AstNode::Word(word) => self.word(word),
+            }
+        }
+        Ok(())
+    }
+
+    // Evaluate a MAKE statement
+    fn make(&mut self, var: String, expr: &AstNode, line: i32) -> Result<(), InterpreterError> {
+        let bound_val = match expr {
+            // Numeric expressions
+            AstNode::ArithExpr {
+                operator,
+                left,
+                right,
+            } => Value::Float(self.arith_expr(operator, left, right)
+                              .with_context(|| format!("Invalid MAKE statement: Failed to evaluate expression passed to {}", var.to_string()))?),
+            AstNode::Query(query_kind) => Value::Float(self.query(query_kind)),
+            AstNode::IdentRef(var) => self.eval_ident_ref_as_val(var)
+                    .with_context(|| format!("Invalid MAKE statement: Failed to evaluate expression passed to {}",var.to_string()))?,
+            AstNode::Num(val) => Value::Float(*val),
+            // Logic expressions
+            AstNode::CompExpr {
+                operator,
+                left,
+                right,
+            } => Value::Bool(self.comp_expr(operator, left, right)
+                             .with_context(|| format!("Failed to evaluate expression provided to {}", operator))?),
+            AstNode::BoolExpr {
+                operator,
+                left,
+                right,
+            } => Value::Bool(self.bool_expr(operator, left, right)
+                           .with_context(|| format!("Failed to evaluate expression provided to {}", operator))?),                            
+            // Word expressions
+            AstNode::Word(word) => Value::Word(word.to_string()),
+            _ => unreachable!("fn make_op in parser checks that expressions passed to MAKE implement is_boolean() or is_numeric()."),
+        };
+
+        // Add binding to map
+        self.environment.insert(var, bound_val);
+        Ok(())
+    }
+ 
+    // Evalutes numeric expressions to its float value (arith_expr, query_expr, ident_ref, num)
+    fn eval_numeric_expression(&mut self, node: &AstNode) -> Result<f32, InterpreterError> {
+        match node {
+            AstNode::ArithExpr {
+                operator,
+                left,
+                right,
+            } => Ok(self.arith_expr(operator, left, right)
+                        .with_context(|| format!("Failed to evaluate expression passed to {}"
+                                                 ,operator.to_string()))?
+                    ),
+            AstNode::Query(query_kind) => Ok(self.query(query_kind)),
+            AstNode::IdentRef(var) => {
+                let ident_value = self.eval_ident_ref(var)
+                    .with_context(|| String::from("Error evaluating numeric expression"))?;
+                match &ident_value {
+                    &Value::Float(num) => Ok(*num),
+                    &Value::Bool(val) => Err(InterpreterError::TypeError(format!("variable '{}' is assigned to the boolean value {}, not a float."
+                                                                                 ,String::from(var), val.to_string()))),
+                    &Value::Word(word) => Err(InterpreterError::TypeError(format!("variable '{}' is assigned to the String value {}, not a float."
+                                                                             ,String::from(var), word))),
+                }
+            }
+            AstNode::Num(val) => Ok(*val),
+            _ => unreachable!("This fn is only called by functions which expect numeric expressions, which has already been verified by the parser."),
+        }
+    }
+
+    // Evalutes logic expressions to its boolean value (comparison_expr, boolean_expr, ident_ref)
+    fn eval_logic_expression(&mut self, node: &AstNode) -> Result<bool, InterpreterError> {
+        match node {
+            AstNode::CompExpr {
+                operator,
+                left,
+                right,
+            } => Ok(self.comp_expr(operator, left, right)
+                        .with_context(|| format!("Failed to evaluate expression passed to {}"
+                                                 ,operator))?
+            ),
+            AstNode::BoolExpr {
+                operator,
+                left,
+                right,
+            } => Ok(self.bool_expr(operator, left, right)
+                        .with_context(|| format!("Failed to evaluate expression passed to {}"
+                                                 ,operator))?
+                    ),
+            AstNode::IdentRef(var) => {
+                let ident_value = self.eval_ident_ref(var)
+                    .with_context(|| String::from("Error evaluating numeric expression"))?;
+                match &ident_value {
+                    &Value::Bool(value) => Ok(*value),
+                    &Value::Float(num) => Err(InterpreterError::TypeError(format!("variable '{}' is assigned to the float value {}, not a bool."
+                                                                                 ,String::from(var), num.to_string()))),
+                    &Value::Word(word) => Err(InterpreterError::TypeError(format!("variable '{}' is assigned to the String value {}, not a bool."
+                                                                             ,String::from(var), word))),
+                }
+            }
+            _ => unreachable!("This fn is only called by functions which expect numeric expressions, which has already been verified by the parser."),
+        }
+    }
+    
+
+    // Evaluate AddAssign
+    fn add_assign(&mut self, var_name: &String, expr: &AstNode) -> Result<(), InterpreterError> {
+        let bound_value = Value::Float(self.eval_numeric_expression(expr)
+                                     .with_context(|| format!("Invalid ADDASSIGN: Failed to add number to '{}'\n",
+                                                             var_name))?); 
+        if let Some(var) = self.environment.get_mut(var_name) {
+            *var += bound_value;
+        } else {
+            return Err(InterpreterError::InvalidVariableRef(format!("Variable {} does not exist.", var_name)));
+        }     
+        Ok(())
+    }
+
+    // Provides adjusted directions relative to current direction
+    fn get_relative_direction(&mut self, direction: &Direction) -> i32 {
+        match direction {
+            Direction::FORWARD => self.current_position.direction as i32,
+            Direction::BACK => self.current_position.direction as i32 + 180,
+            Direction::LEFT => self.current_position.direction as i32 - 90,
+            Direction::RIGHT => self.current_position.direction as i32 + 90,
+        }
+    }
+
+    // Draws a line given a direction
+    fn draw_line(&mut self, direction: &Direction, value: &AstNode) -> Result<(), InterpreterError> {
+        let num_pixels = self.eval_numeric_expression(value)
+                             .with_context(|| format!("Invalid ADDASSIGN: Failed to add number to '{}'\n",
+                                                      direction))?; 
+
+        let adjusted_direction = self.get_relative_direction(direction);
+
+        if self.currently_drawing {
+            let res_pair = self.image.draw_simple_line(
+                self.current_position.x_coordinate,
+                self.current_position.y_coordinate,
+                adjusted_direction,
+                num_pixels,
+                COLORS[self.current_color],
+            );
+
+            match res_pair {
+                Ok(res_pair) => {
+                    (
+                        self.current_position.x_coordinate,
+                        self.current_position.y_coordinate,
+                    ) = res_pair;
+                }
+                Err(error) => return Err(InterpreterError::DrawLineError(format!("Failed to draw line for direction {} due to UNSVG error:"
+                                                                                 ,direction)
+                                                                         ,error.to_string())) 
+            };
+        } else {
+            // Update coordinates without drawing
+            let res_pair = get_end_coordinates(
+                self.current_position.x_coordinate,
+                self.current_position.y_coordinate,
+                adjusted_direction,
+                num_pixels,
+            );
+
+            (
+                self.current_position.x_coordinate,
+                self.current_position.y_coordinate,
+            ) = res_pair;
+        };
+
+        Ok(())
+    }
+   
+    // Evaluates if statement
+    fn if_statement(&mut self, condition: &AstNode, body: &Vec<AstNode>) -> Result<(), InterpreterError> {
+        let condition_is_true = self.eval_logic_expression(condition)
+                                    .with_context(|| format!("Invalid IF statement condition.\n"
+                                                             ))?; 
+        if condition_is_true {
+            self.evaluate(body)
+                .with_context(|| format!("Invalid IF statement condition.\n"))?;
+        }
+        Ok(())
+    }
+
+    // Evaluates while statement
+    fn while_statement(&mut self, condition: &AstNode, body: &Vec<AstNode>) -> Result<(), InterpreterError> {
+        let condition_is_true = self.eval_logic_expression(condition)
+                                    .with_context(|| format!("Invalid WHILE statement condition.\n"
+                                                             ))?; 
+        if condition_is_true {
+            self.evaluate(body)
+                 .with_context(|| format!("Invalid expression in the body of the WHILE statement.\n"))?;
+            self.while_statement(condition, body)
+                  .with_context(|| format!("Invalid expression in the body of the WHILE loop encountered while looping.\n"))?;
+            }
+        Ok(())
+    }
+
+    // Set drawing state
+    fn set_drawing_status(&mut self, new_drawing_status: bool) {
+        self.currently_drawing = new_drawing_status;
+    }
+
+    // Set pen color
+    fn set_pen_color(&mut self, value: &AstNode) -> Result<(), InterpreterError> {
+        let float_val = self.eval_numeric_expression(value)
+                            .with_context(|| format!("Invalid argument to PENCOLOR.\n"
+                                                             ))?; 
+
+        // Check precision & bounds before casting to an int color
+        if float_val == (float_val as usize) as f32 && (0.0..=15.0).contains(&float_val) {
+            self.current_color = float_val as usize;
+        } else {
+            return Err(InterpreterError::InvalidPenColor(float_val.to_string())); 
+        };
+        Ok(())
+    }
+    
+    // Set the position/orientation of the pen
+    fn set_position(&mut self, update_type: &PenPos, value: &AstNode) -> Result<(), InterpreterError> {
+        let val = self.eval_numeric_expression(value)
+                      .with_context(|| format!("Invalid argument to {}.\n", update_type))?; 
+        match update_type {
+            PenPos::SETX => self.current_position.x_coordinate = val,
+            PenPos::SETY => self.current_position.y_coordinate = val,
+            PenPos::SETHEADING => self.current_position.direction = val,
+            PenPos::TURN => self.current_position.direction += val,
+        }
+
+        Ok(())
+    }
+
+
+    // Create a new procedure
+    fn create_procedure(&mut self, name: String, body: Rc<Vec<AstNode>>) {
+        // Add the procedure name and body to the func environment
+        self.func_environment.insert(name, body);
+    }
+
+    // func_body has an exclusive borrow over the environment maps Vec<AstNode>. Below, we access
+    // self.evaluate(), which itself may mutate the map. As we assume procedures are never defined
+    // (but can be called) within another procedure, we can assure self.evaluate() will never 
+    // mutate the map, and will at most read from it, in the case another procedure is referenced. 
+    // As such, we take a Rc over the func_body to allow shared access to the map.
+    fn eval_procedure(&mut self, name_ref: &String, args: &Vec<AstNode>) -> Result<(), InterpreterError> {
+        // Eval the args to bind the values
+        self.evaluate(args)
+            .with_context(|| format!("Failed to bind provided arguments to {}'s parameters.\n", name_ref))?; 
+
+        // Evaluate body of procedure
+        if let Some(func_body) = self.func_environment.get_mut(name_ref) {
+            let mut func_body_rc = Rc::clone(func_body);
+            self.evaluate(func_body_rc.borrow_mut())
+                .with_context(|| format!("Failed to evaluate body of procedure {}.\n", name_ref))?; 
+
+        } else {
+            return Err(InterpreterError::InvalidProcedureRef(format!("Referenced Procedure {} does not exist."
+                                                                                 ,name_ref))); 
+        }
+
+        Ok(())
+    }
+
+
+    fn arith_expr(&mut self, operator: &ArithOp, left: &AstNode, right: &AstNode) -> Result<f32, InterpreterError> {
+        
+        let left_val = self.eval_numeric_expression(left)
+            .with_context(|| format!("Failed to evaluate first argument to operator '{}", operator))?;
+        
+        let right_val = self.eval_numeric_expression(right)
+            .with_context(|| format!("Failed to evaluate second argument to operator '{}", operator))?;
+
+        match operator {
+            ArithOp::ADD => Ok(left_val + right_val),
+            ArithOp::SUB => Ok(left_val - right_val),
+            ArithOp::MUL => Ok(left_val * right_val),
+            ArithOp::DIV => Ok(left_val / right_val),
+        }
+    }
+
+
+    // Evalutes any type of expression (boolean, float, String)
+    fn eval_expression(&mut self, node: &AstNode) -> Result<Value, InterpreterError> {
+        match node {
+            AstNode::CompExpr {
+                operator,
+                left,
+                right,
+             } => Ok(Value::Bool(self.comp_expr(operator, left, right)
+                        .with_context(|| format!("Failed to evaluate expression passed to {}"
+                                                 ,operator))?)
+            ),           
+            AstNode::BoolExpr {
+                operator,
+                left,
+                right,
+            } => Ok(Value::Bool(self.bool_expr(operator, left, right)
+                                .with_context(|| format!("Failed to evaluate expression passed to {}", operator))?)),
+            AstNode::IdentRef(var) => 
+                Ok(self.eval_ident_ref_as_val(var)
+                    .with_context(|| String::from("Error evaluating expression"))?),
+            AstNode::Word(word) => 
+                Ok(Value::Word(word.to_string())),
+            _ => unreachable!("This fn is only called by functions which expect numeric expressions, which has already been verified by the parser."),
+        }
+    }
+
+    fn comp_expr(&mut self, operator: &CompOp, left: &AstNode, right: &AstNode) -> Result<bool, InterpreterError> {
+
+            let all_types_valid = match operator {
+                CompOp::EQ => true,
+                CompOp::NE => true,
+                _ => false,
+            };
+
+
+            // If operator is EQ or NE, we need to parse for floats, bools and strings
+            let left_val = if all_types_valid {
+                self.eval_expression(left)
+                    .with_context(|| format!("Failed to evaluate first argument to {}", operator))?
+            }  else {
+                Value::Float(self.eval_numeric_expression(left)
+                    .with_context(|| format!("Failed to evaluate first argument to {}", operator))?)
+            };
+
+            let right_val = if all_types_valid {
+                self.eval_expression(right)
+                    .with_context(|| format!("Failed to evaluate second argument to {}", operator))?
+            }  else {
+                Value::Float(self.eval_numeric_expression(right)
+                    .with_context(|| format!("Failed to evaluate second argument to {}", operator))?)
+            };
+
+            match operator {
+            CompOp::EQ => Ok(left_val == right_val),
+            CompOp::NE => Ok(left_val != right_val),
+            CompOp::LT => Ok(left_val < right_val),
+            CompOp::GT => Ok(left_val > right_val),
+        }
+    }
+
+
+
+    fn bool_expr(&mut self, operator: &BoolOp, left: &AstNode, right: &AstNode) -> Result<bool, InterpreterError> {
+
+        let left_val = self.eval_logic_expression(left)
+            .with_context(|| format!("Failed to evaluate first argument to {}", operator))?;
+        let right_val = self.eval_logic_expression(right)
+            .with_context(|| format!("Failed to evaluate second argument to {}", operator))?;
+
+        match operator {
+            BoolOp::AND => Ok(left_val & right_val),
+            BoolOp::OR => Ok(left_val || right_val),
+        }
+    }
+
+    fn query(&mut self, query_kind: &QueryKind) -> f32 {
+        match query_kind {
+            QueryKind::XCOR => self.current_position.x_coordinate,
+            QueryKind::YCOR => self.current_position.y_coordinate,
+            QueryKind::HEADING => self.current_position.direction,
+            QueryKind::COLOR => self.current_color as f32,
+        }
+    }
+
+    // Store a raw string in the map (bind to itself) 
+    fn word(&mut self, var: &String) {
+        // A clone is necessary here as we access to the same value,
+        // and a smart pointer is likely excessive 
+        let ident_clone = String::from(var);
+        self.environment.insert(var.to_string(), Value::Word(ident_clone));
+    }
+    
+    // Returns a reference to an identifieres value
+    fn eval_ident_ref(&mut self, var: &String) -> Result<&Value, InterpreterError> {
+        match self.environment.get(var) {
+            Some(value) => Ok(value),
+            _ => Err(InterpreterError::InvalidVariableRef(var.to_string())),
+        }
+    }
+
+    // Returns a copy of teh identifiers value
+    fn eval_ident_ref_as_val(&mut self, var: &String) -> Result<Value, InterpreterError> {
+        match self.environment.get(var) {
+            Some(value) => Ok(value.clone()),
+            _ => Err(InterpreterError::InvalidVariableRef(var.to_string())),
+        }
+    }
+
+
+}
+
+
