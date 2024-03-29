@@ -301,8 +301,7 @@ impl Parser {
             // for syntactic errors, while the interpreter will check for semantic errors.
             TokenKind::COMPOP => {
 
-
-                if !(left.is_boolean() && left.is_numeric()) && !(right.is_boolean() && right.is_numeric()) && (left.is_boolean() != right.is_boolean()
+                if !(left.is_boolean() && left.is_numeric() || right.is_boolean() && right.is_numeric()) && (left.is_boolean() != right.is_boolean()
                         || left.is_numeric() != right.is_numeric() || left.is_word() != right.is_word()) {
                     return Err(ParserError::NonBooleanExpr(
                         operator_token.line.to_string(),
