@@ -6,11 +6,11 @@ Please mark stages that are complete with an [X].
 Stages that are partially complete should be marked with a [?].
 Stages that are not complete should be left blank (like [ ]).
 
-> [ ] Stage 1 (Pen Controls)
-> [ ] Stage 2 (Variables + Queries)
-> [ ] Stage 3 (If + While)
-> [ ] Stage 4 (The Stack)
-> [ ] Stage 5 (Procedures)
+> [X] Stage 1 (Pen Controls)
+> [X] Stage 2 (Variables + Queries)
+> [X] Stage 3 (If + While)
+> [X] Stage 4 (The Stack)
+> [X] Stage 5 (Procedures)
 
 ## Design Excellence
 
@@ -18,16 +18,25 @@ If you have completed a "design excellence" task, please write what
 the task was below (note, it MUST be on the list in the assignment or
 approved by COMP6991 staff).
 
->
+> Beautiful errors
+> Building close to zero copy
 
 Please write a paragraph or two (max. 250 words) describing how your design was
 influenced by this challenge, with specific reference to sections of your code.
 If you completed the "Pull Request" design excellence, please just leave a link
 to your PR.
 
->
->
->
+> For beaitiful errors, tracing errors was my highest priority. I used the thiserror crate to
+create custom errors for each stage (lex, parse, interpret), and i used the anyhow::Result crate
+to allow errors to be propogated. With this, i was able to create a stack trace on the error calls
+to provide each specific point in the error, rather than generic errors. These specific error types
+can be seen in logolang_lib/src/logolang_errors.rs. Additionally for this task, line numbers were
+kept attached to the lex and parser stages for error clarity, despite the small overhead it costs.
+For minimising copy, copy during error was not considered as performance is likely not at the forefront
+when the program crashes. The parser and interpreter focused on passing ownership/borrowing references
+to enforce zero copy. A prominent example of copy minimsation can be seen (with explanation) in the 
+procedure_reference fn in the parser and interpreter, where reference counted variables are used to
+prevent expensive copy operations, and rather using cheap rc copies.
 
 ## Design Limitations
 
@@ -35,7 +44,12 @@ If you made any design decisions which you now regret making; but don't to go ba
 let us know here. You can make up your design marks by acknowledging up to 5 things you would do
 differently now.
 
-> - TODO
+> The error propogation method utilised involved a LOT of 'with_context()' areas, which honestly
+seemed to clutter the code. Implementing custom errors which implement from traits on the other hand
+might have been a more desirable way to declutter and provide more specific error printing. Additionally,
+some functions (such as comp_op, arith_op and bool_op) in the interpreter file likely could have had
+their logic split up in a more cleanly way, but I was trying to bundle them similarly to reduce coat
+bloat and perhaps ended up lacking clarity, which was not worthile looking back.
 
 ## Other Comments
 
