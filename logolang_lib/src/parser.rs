@@ -254,7 +254,7 @@ impl Parser {
             return Err(ParserError::IncorrectArgType(
                     ident_token.line.to_string(),
                     format!("Invalid MAKE statement. {} received an argument which does not return a float value or a boolean value."
-                            ,ident_token.value.to_string())));
+                            ,ident_token.value)));
         }
 
         Ok(AstNode::MakeStmnt {
