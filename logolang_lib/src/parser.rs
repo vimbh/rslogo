@@ -231,7 +231,7 @@ impl Parser {
         // Consume next token
         let ident_token = tokens
             .pop_front()
-            .ok_or_else(|| ParserError::UnexpectedEnding)?;
+            .ok_or(ParserError::UnexpectedEnding)?;
 
         // Verify identifier token
         if TokenKind::IDENT != ident_token.kind {
@@ -479,8 +479,8 @@ impl Parser {
         // Parse body opening parenthesis
         let l_paren_token = tokens
             .pop_front()
-            .ok_or_else(|| ParserError::UnexpectedEnding)
-            .expect("Checked validity in ok_or_else");
+            .ok_or(ParserError::UnexpectedEnding)
+            .expect("Checked validity in ok_or");
 
         if l_paren_token.kind != TokenKind::LPAREN {
             return Err(ParserError::MissingParenthesis(
@@ -511,8 +511,8 @@ impl Parser {
         // Verify if we saw the closing parenthesis, or if we ran out of tokens
         let r_paren_token = tokens
             .pop_front()
-            .ok_or_else(|| ParserError::UnexpectedEnding)
-            .expect("Checked validity in ok_or_else");
+            .ok_or(ParserError::UnexpectedEnding)
+            .expect("Checked validity in ok_or");
 
         if r_paren_token.kind != TokenKind::RPAREN {
             return Err(ParserError::MissingParenthesis(
@@ -548,8 +548,8 @@ impl Parser {
         // Parse the next token
         let var_token = tokens
             .pop_front()
-            .ok_or_else(|| ParserError::UnexpectedEnding)
-            .expect("Checked validity in ok_or_else");
+            .ok_or(ParserError::UnexpectedEnding)
+            .expect("Checked validity in ok_or");
 
         // Check valid identifier was provided to assign to
         if var_token.kind != TokenKind::IDENT {
@@ -588,8 +588,8 @@ impl Parser {
         // Parse Proc Name
         let proc_name_token = tokens
             .pop_front()
-            .ok_or_else(|| ParserError::UnexpectedEnding)
-            .expect("Checked validity in ok_or_else");
+            .ok_or(ParserError::UnexpectedEnding)
+            .expect("Checked validity in ok_or");
 
         if proc_name_token.kind != TokenKind::PROCNAME {
             return Err(ParserError::InvalidProcName(
@@ -610,8 +610,8 @@ impl Parser {
             arg_tokens.push(
                 tokens
                     .pop_front()
-                    .ok_or_else(|| ParserError::UnexpectedEnding)
-                    .expect("Checked validity in ok_or_else")
+                    .ok_or(ParserError::UnexpectedEnding)
+                    .expect("Checked validity in ok_or")
                     .value,
             );
         }
@@ -636,8 +636,8 @@ impl Parser {
         // Verify if we saw the END token, or if we ran out of tokens
         tokens
             .pop_front()
-            .ok_or_else(|| ParserError::UnexpectedEnding)
-            .expect("Checked validity in ok_or_else");
+            .ok_or(ParserError::UnexpectedEnding)
+            .expect("Checked validity in ok_or");
 
         // Add to our procedure map: <procedure_name, Rc<<parameter_list>>
         // so we can bind arguments to each parameter if a procedure reference is seen later.
