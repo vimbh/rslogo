@@ -283,7 +283,7 @@ pub fn tokenize(file_path: std::path::PathBuf) -> Result<VecDeque<Token>, LexerE
     let file = BufReader::new(File::open(file_path)?);
 
     let mut tokens = VecDeque::<Token>::new();
-    for (line_no, buf_line) in (0_i32..).zip(file.lines()) {
+    for (line_no, buf_line) in (1_i32..).zip(file.lines()) {
         let line = buf_line?;
 
         // Ignore comments
