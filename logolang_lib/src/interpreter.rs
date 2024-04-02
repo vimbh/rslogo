@@ -1,3 +1,26 @@
+/// Module for interpreting parsed LoGo-lang AST (Abstract Syntax Tree) nodes and executing them.
+///
+/// This module provides an interpreter for LoGo-lang programs represented as AST nodes.
+///
+/// # Examples
+///
+/// ```
+/// use logolang_interpreter::{Interpreter, AstNode, Value};
+///
+/// let ast = vec![
+///     AstNode::MakeStmnt {
+///         var: String::from("x"),
+///         expr: Box::new(AstNode::Num(10.0)),
+///         line: 1,
+///     }
+/// ];
+///
+/// let mut interpreter = Interpreter::new();
+/// let result = interpreter.run(&ast);
+/// assert!(result.is_ok());
+/// ```
+///
+
 use crate::logolang_errors::InterpreterError;
 use crate::parser::{ArithOp, AstNode, BoolOp, CompOp, Direction, NodeType, PenPos, QueryKind};
 use anyhow::{Context, Result};
@@ -8,6 +31,7 @@ use std::mem::discriminant;
 use std::rc::Rc;
 use unsvg::{get_end_coordinates, Image, COLORS};
 
+/// Describes to turtles position
 #[derive(Debug)]
 pub struct Position {
     x_coordinate: f32,
@@ -15,6 +39,7 @@ pub struct Position {
     direction: f32,
 }
 
+/// The terminal values for which an expression can evaluate to
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Value {
     Float(f32),
@@ -22,6 +47,7 @@ pub enum Value {
     Word(String),
 }
 
+/// Implementation for addition assignment of type Value::Float
 impl std::ops::AddAssign for Value {
     fn add_assign(&mut self, rhs: Self) {
         match (self, rhs) {
@@ -31,6 +57,7 @@ impl std::ops::AddAssign for Value {
     }
 }
 
+// Implement displays for the purpose of reporting errors
 impl std::fmt::Display for Direction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -41,7 +68,6 @@ impl std::fmt::Display for Direction {
         }
     }
 }
-
 impl std::fmt::Display for PenPos {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -52,7 +78,6 @@ impl std::fmt::Display for PenPos {
         }
     }
 }
-
 impl std::fmt::Display for ArithOp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -63,7 +88,6 @@ impl std::fmt::Display for ArithOp {
         }
     }
 }
-
 impl std::fmt::Display for CompOp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -74,7 +98,6 @@ impl std::fmt::Display for CompOp {
         }
     }
 }
-
 impl std::fmt::Display for BoolOp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -84,25 +107,35 @@ impl std::fmt::Display for BoolOp {
     }
 }
 
+
+/// Interpreter for the RSLOGO language.
+/// Performs top-down descent over the AST.
 pub struct Interpreter<'a> {
+    /// Image to write
     image: &'a mut Image,
+    /// Variable environment
     environment: HashMap<String, Value>,
+    /// Function environment
     func_environment: HashMap<String, Rc<Vec<AstNode>>>, // Map each proc name to a list of its param names and a pointer to its executable body
+    /// Turtle position
     current_position: Position,
+    /// Pen color
     current_color: usize,
+    /// Drawing status
     currently_drawing: bool,
 }
 
 impl<'a> Interpreter<'a> {
-    // Constructor
+    /// Constructor
     pub fn new(image: &'a mut Image) -> Self {
+        let (width, height) = image.get_dimensions();
         Self {
             image,
             environment: HashMap::new(),
             func_environment: HashMap::new(),
             current_position: Position {
-                x_coordinate: 0.0,
-                y_coordinate: 0.0,
+                x_coordinate: width as f32 / 2.0,
+                y_coordinate: height as f32 / 2.0,
                 direction: 0.0,
             },
             current_color: 7,         // Starts default white
@@ -110,7 +143,8 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    // User facing run function
+    /// Runs the evaluator to traverse the AST.
+    /// Returns the edited image on success, else returns an InterpreterError.
     pub fn run(&mut self, ast: &Vec<AstNode>) -> Result<&Image, InterpreterError> {
         self.evaluate(ast)
             .with_context(|| "Failed to evaluate program".to_string())?;
@@ -118,8 +152,10 @@ impl<'a> Interpreter<'a> {
         Ok(self.image)
     }
 
-    // Traverse AST
-    pub fn evaluate(&mut self, ast: &Vec<AstNode>) -> Result<(), InterpreterError> {
+    /// Traverses AST by matching on each parent node, and recursively stepping
+    /// until leaf nodes are reached. The results are then propogated back up to
+    /// the parent node.
+    fn evaluate(&mut self, ast: &Vec<AstNode>) -> Result<(), InterpreterError> {
         for node in ast {
             match node {
                 // Statement evaluation
@@ -201,6 +237,7 @@ impl<'a> Interpreter<'a> {
         Ok(())
     }
 
+    /// Evaluation of MAKE statment
     fn make(&mut self, var: String, expr: &AstNode, line: i32) -> Result<(), InterpreterError> {
         let bound_val = match expr {
             // Numeric expressions
@@ -210,7 +247,7 @@ impl<'a> Interpreter<'a> {
                 right,
                 line
             } => Value::Float(self.arith_expr(operator, left, right, *line)
-                              .with_context(|| format!("[Line {}]: Invalid MAKE statement: Failed to evaluate expression passed to {}",line, var))?),
+                              .with_context(|| format!("[Line {}]: interp Invalid MAKE statement: Failed to evaluate expression passed to {}",line, var))?),
             AstNode::Query(query_kind) => Value::Float(self.query(query_kind)),
             AstNode::IdentRef(var) => self.eval_ident_ref_as_val(var)
                     .with_context(|| format!("[Line {}]: Invalid MAKE statement: Failed to evaluate expression passed to {}",line, var))?,
@@ -240,7 +277,9 @@ impl<'a> Interpreter<'a> {
         Ok(())
     }
 
-    // Evalutes numeric expressions to its float value (arith_expr, query_expr, ident_ref, num)
+
+    /// Evaluation of numeric expressions tp their terminal float value.
+    /// Numeric expression include arith_expr, query_expr, ident_ref and num.
     fn eval_numeric_expression(
         &mut self,
         node: &AstNode,
@@ -259,8 +298,7 @@ impl<'a> Interpreter<'a> {
                     ),
             AstNode::Query(query_kind) => Ok(self.query(query_kind)),
             AstNode::IdentRef(var) => {
-                let ident_value = self.eval_ident_ref(var)
-                    .with_context(|| String::from("Error evaluating numeric expression"))?;
+                let ident_value = self.eval_ident_ref(var)?;
                 match ident_value {
                     Value::Float(num) => Ok(*num),
                     Value::Bool(val) => Err(InterpreterError::TypeError(format!("[Line {}]: variable '{}' is assigned to the boolean value {}, not a float.",
@@ -273,8 +311,10 @@ impl<'a> Interpreter<'a> {
             _ => unreachable!("This fn is only called by functions which expect numeric expressions, which has already been verified by the parser."),
         }
     }
+    
 
-    // Evalutes logic expressions to its boolean value (comparison_expr, boolean_expr, ident_ref)
+    /// Evalutes logic expressions to their terminal bool value.
+    /// Logic expressions include comparison_expr, boolean_expr and ident_ref
     fn eval_logic_expression(
         &mut self,
         node: &AstNode,
@@ -331,7 +371,7 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    // Evaluate AddAssign
+    /// Evaluates Addition Assignment operation
     fn add_assign(
         &mut self,
         var_name: &String,
@@ -356,17 +396,17 @@ impl<'a> Interpreter<'a> {
         Ok(())
     }
 
-    // Provides adjusted directions relative to current direction
+    /// Helper fn: Provides adjusted directions relative to current direction
     fn get_relative_direction(&mut self, direction: &Direction) -> i32 {
         match direction {
             Direction::FORWARD => self.current_position.direction as i32,
             Direction::BACK => self.current_position.direction as i32 + 180,
-            Direction::LEFT => self.current_position.direction as i32 - 90,
+            Direction::LEFT => self.current_position.direction as i32 + 270,
             Direction::RIGHT => self.current_position.direction as i32 + 90,
         }
     }
 
-    // Draws a line given a direction
+    /// Draws a line given a direction
     fn draw_line(
         &mut self,
         direction: &Direction,
@@ -426,7 +466,7 @@ impl<'a> Interpreter<'a> {
         Ok(())
     }
 
-    // Evaluates if statement
+    /// Evaluates If statement
     fn if_statement(
         &mut self,
         condition: &AstNode,
@@ -443,7 +483,7 @@ impl<'a> Interpreter<'a> {
         Ok(())
     }
 
-    // Evaluates while statement
+    /// Evaluates while statement
     fn while_statement(
         &mut self,
         condition: &AstNode,
@@ -467,12 +507,12 @@ impl<'a> Interpreter<'a> {
         Ok(())
     }
 
-    // Set drawing state
+    /// Sets drawing state
     fn set_drawing_status(&mut self, new_drawing_status: bool) {
         self.currently_drawing = new_drawing_status;
     }
 
-    // Set pen color
+    /// Sets pen color
     fn set_pen_color(&mut self, value: &AstNode, line: i32) -> Result<(), InterpreterError> {
         let float_val = self
             .eval_numeric_expression(value, line)
@@ -487,7 +527,7 @@ impl<'a> Interpreter<'a> {
         Ok(())
     }
 
-    // Set the position/orientation of the pen
+    /// Sets the position/orientation of the pen
     fn set_position(
         &mut self,
         update_type: &PenPos,
@@ -507,12 +547,13 @@ impl<'a> Interpreter<'a> {
         Ok(())
     }
 
-    // Create a new procedure
+    /// Creates a new procedure binding in the function map
     fn create_procedure(&mut self, name: String, body: Rc<Vec<AstNode>>) {
         // Add the procedure name and body to the func environment
         self.func_environment.insert(name, body);
     }
 
+    /// Evaluates a procedure that has been referenced
     // func_body has an exclusive borrow over the environment maps Vec<AstNode>. Below, we access
     // self.evaluate(), which itself may mutate the map. As we assume procedures are never defined
     // (but can be called) within another procedure, we can assure self.evaluate() will never
@@ -551,6 +592,7 @@ impl<'a> Interpreter<'a> {
         Ok(())
     }
 
+    /// Evaluates an arithmetic expression
     fn arith_expr(
         &mut self,
         operator: &ArithOp,
@@ -580,6 +622,7 @@ impl<'a> Interpreter<'a> {
         }
     }
 
+    /// Evaluates a comparison expression
     fn comp_expr(
         &mut self,
         operator: &CompOp,
@@ -605,21 +648,19 @@ impl<'a> Interpreter<'a> {
                     )));
                 }
             }
-            _ => {}
+            _ => {},
         };
 
         // Choose evaluation path based on trait implementation
         let left_val = match left {
             _ if left.is_word() => match left {
                 AstNode::Word(word) => Value::Word(word.to_string()),
-                AstNode::IdentRef(word) => {
-                    self.eval_ident_ref_as_val(word).with_context(|| {
-                        format!(
-                            "[Line {}]: Failed to evaluate first argument to {}",
-                            line, operator
-                        )
-                    })?
-                }
+                AstNode::IdentRef(word) => self.eval_ident_ref_as_val(word).with_context(|| {
+                    format!(
+                        "[Line {}]: Failed to evaluate first argument to {}",
+                        line, operator
+                    )
+                })?,
                 _ => unreachable!("These are the only nodes for which is_word() is true"),
             },
             _ if left.is_numeric() => {
@@ -649,14 +690,12 @@ impl<'a> Interpreter<'a> {
         let right_val = match right {
             _ if right.is_word() => match right {
                 AstNode::Word(word) => Value::Word(word.to_string()),
-                AstNode::IdentRef(word) => {
-                    self.eval_ident_ref_as_val(word).with_context(|| {
-                        format!(
-                            "[Line {}]: Failed to evaluate first argument to {}",
-                            line, operator
-                        )
-                    })?
-                }
+                AstNode::IdentRef(word) => self.eval_ident_ref_as_val(word).with_context(|| {
+                    format!(
+                        "[Line {}]: Failed to evaluate first argument to {}",
+                        line, operator
+                    )
+                })?,
                 _ => panic!("{:?}", right),
             },
             _ if right.is_numeric() => {
@@ -699,6 +738,7 @@ impl<'a> Interpreter<'a> {
         }
     }
 
+    /// Evaluates a boolean expression
     fn bool_expr(
         &mut self,
         operator: &BoolOp,
@@ -734,7 +774,7 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    // Store a raw string in the map (bind to itself)
+    /// Stores a raw string in the map (bind to itself)
     fn word(&mut self, var: &String) {
         // A clone is necessary here as we access to the same value,
         // and a smart pointer is likely excessive
@@ -743,7 +783,7 @@ impl<'a> Interpreter<'a> {
             .insert(var.to_string(), Value::Word(ident_clone));
     }
 
-    // Returns a reference to an identifieres value
+    /// Returns a reference to an identifiers value
     fn eval_ident_ref(&mut self, var: &String) -> Result<&Value, InterpreterError> {
         match self.environment.get(var) {
             Some(value) => Ok(value),
@@ -751,7 +791,7 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    // Returns a copy of the identifiers value
+    /// Returns a copy of the identifiers value
     fn eval_ident_ref_as_val(&mut self, var: &String) -> Result<Value, InterpreterError> {
         match self.environment.get(var) {
             Some(value) => Ok(value.clone()),
