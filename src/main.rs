@@ -43,7 +43,9 @@ fn main() -> Result<()> {
     let mut parser = Parser::new();
     let ast = match parser.parse(tokens) {
         Ok(ast) => ast,
-        Err(e) => panic!("Error: {}", e),
+        Err(e) => {
+            return Err(e.into());
+        }
     };
 
     let mut empty_image = Image::new(image_width, image_height);
@@ -71,7 +73,9 @@ fn main() -> Result<()> {
                 return Err(ImgFileError::UnsupportedFileExtension.into());
             }
         },
-        Err(e) => panic!("Error: {}", e),
+        Err(e) => {
+            return Err(e.into());
+            }
     }
 
     Ok(())
