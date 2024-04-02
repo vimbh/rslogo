@@ -46,17 +46,12 @@ fn main() -> Result<()> {
         Err(e) => panic!("Error: {}", e),
     };
 
-    //dbg!(&ast);
-
     let mut empty_image = Image::new(image_width, image_height);
 
     // Loop nodes and evaluate
     let mut interpreter = Interpreter::new(&mut empty_image);
-    let drawing = interpreter.run(&ast);
-
-    if let Ok(image) = drawing {
-        //match image_path.extension().map(|s| s.to_str()).flatten() {
-        match image_path.extension().and_then(|s| s.to_str()) {
+    match interpreter.run(&ast) {
+        Ok(image) => match image_path.extension().and_then(|s| s.to_str()) {
             Some("svg") => {
                 let res = image.save_svg(&image_path);
                 if let Err(e) = res {
@@ -75,7 +70,8 @@ fn main() -> Result<()> {
                 eprintln!("File extension not supported");
                 return Err(ImgFileError::UnsupportedFileExtension.into());
             }
-        }
+        },
+        Err(e) => panic!("Error: {}", e),
     }
 
     Ok(())
