@@ -1,14 +1,10 @@
 ## This defines RSLOGO's Context Free Grammar in BNF.
 
-<program> ::= <expression>+
-            | <statement>+
-            | <expression>+ <statement>+
-            | <statement>+ <expression>+
+<program> ::= (<expression> | <statement>)+ | <word>::seperated by newlines
             
 ## Expressions return either float or bool values, or are a raw string.
 <expression> ::= <num_expression>
                | <logic_expression>
-               | <word>
 
 <num_expression> ::= <arith_expression>
                    | <query_expression>
@@ -34,12 +30,15 @@
 <arith_expression> ::= <arithmetic_operator> <num_expression> <num_expression>
 
 <comparison_expression> ::= <comparison_operator> <num_expression> <num_expression>
-
+                          | ("EQ"|"NE") <boolean_expression> <boolean_expression>
+                          | ("EQ"|"NE") <word> <word>
+                        
 <logic_expression> ::= <boolean_operator> <boolean_expression> <boolean_expression>
+                     | ("EQ" | "NE")    
 
 <query_expression> ::= <query_kind>
 
-<make> ::= "MAKE" <identifier> <expression>
+<make> ::= "MAKE" <identifier> (<expression> | <word>)
 
 <add_assign> ::= "ADDASSIGN" <identifier> <num_expression>
 
@@ -59,8 +58,6 @@
 
 ## Terminals
 <identifier> := String
-
-<word> := String
 
 <ident_ref> ::= <Num> 
               | <Bool>
