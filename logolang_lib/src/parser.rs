@@ -5,6 +5,8 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::rc::Rc;
 
+
+/// Represents arithmetic operations
 #[derive(Debug)]
 pub enum ArithOp {
     ADD,
@@ -13,6 +15,7 @@ pub enum ArithOp {
     DIV,
 }
 
+/// Represents comparison operations
 #[derive(Debug)]
 pub enum CompOp {
     EQ,
@@ -21,12 +24,14 @@ pub enum CompOp {
     GT,
 }
 
+/// Represents boolean operations
 #[derive(Debug)]
 pub enum BoolOp {
     AND,
     OR,
 }
 
+/// Represents drawing directions
 #[derive(Debug)]
 pub enum Direction {
     FORWARD,
@@ -35,6 +40,7 @@ pub enum Direction {
     LEFT,
 }
 
+/// Represents pen position
 #[derive(Debug)]
 pub enum PenPos {
     SETX,
@@ -43,6 +49,7 @@ pub enum PenPos {
     TURN,
 }
 
+/// Represents types of queries
 #[derive(Debug)]
 pub enum QueryKind {
     XCOR,
@@ -51,83 +58,100 @@ pub enum QueryKind {
     COLOR,
 }
 
+/// Represents abstract syntax tree nodes
+// Line corresponds to line number at the start of the expression/statement
 #[derive(Debug)]
 pub enum AstNode {
+    /// Make statements
     MakeStmnt {
         var: String,
         expr: Box<AstNode>,
         line: i32,
     },
+    /// Arithmetic expressions
     ArithExpr {
         operator: ArithOp,
         left: Box<AstNode>,
         right: Box<AstNode>,
         line: i32,
     },
+    /// Comparison expressions
     CompExpr {
         operator: CompOp,
         left: Box<AstNode>,
         right: Box<AstNode>,
         line: i32,
     },
+    /// Boolean expressions
     BoolExpr {
         operator: BoolOp,
         left: Box<AstNode>,
         right: Box<AstNode>,
         line: i32,
     },
+    /// Reference to identifier
     IdentRef(String),
+    /// Addition assignment
     AddAssign {
         var_name: String,
         expr: Box<AstNode>,
         line: i32,
     },
+    /// Identifier
     Ident {
         var_name: String,
         line: i32,
     },
+    /// Number
     Num(f32),
+    /// If statement
     IfStmnt {
         condition: Box<AstNode>,
         body: Box<Vec<AstNode>>,
         line: i32,
     },
+    /// While statement
     WhileStmnt {
         condition: Box<AstNode>,
         body: Box<Vec<AstNode>>,
         line: i32,
     },
+    /// Pen status (penup/pendown)
     PenStatusUpdate(bool),
     PenColorUpdate {
         color: Box<AstNode>,
         line: i32,
     },
+    /// Pen position 
     PenPosUpdate {
         update_type: PenPos,
         value: Box<AstNode>,
         line: i32,
     },
+    /// Type of query
     Query(QueryKind),
+    /// Procedure definition
     Procedure {
         name: String,
         body: Rc<Vec<AstNode>>,
     },
+    /// Reference to procedure
     ProcedureRef {
         name_ref: String,
         args: Rc<Vec<AstNode>>,
         line: i32,
     },
+    /// Draw instruction (direction instructions)
     DrawInstruction {
         direction: Direction,
         num_pixels: Box<AstNode>,
         line: i32,
     },
+    /// String literals
     Word(String),
 }
 
-/// Defines the return type of an expression
-// is_boolean might seem redundant, but is needed to differentiate between
-// Nodes which implements neither, vs those which implement is_numeric.
+/// A trait implementation that defines the operations inherited by the node
 pub trait NodeType {
     fn is_numeric(&self) -> bool {
         false
@@ -158,7 +182,8 @@ impl NodeType for AstNode {
     }
 }
 
-#[allow(unused)]
+
+/// Parser for the RSLOGO language
 pub struct Parser {
     // Keep track of the parameter names for each procedure
     proc_arg_map: HashMap<String, Rc<Vec<String>>>,
@@ -171,12 +196,16 @@ impl Default for Parser {
 }
 
 impl Parser {
+    /// Returns a new Parser instance
     pub fn new() -> Self {
         Self {
             proc_arg_map: HashMap::new(),
         }
     }
 
+    /// Parses a given sequence of tokens into an abstract syntax tree (AST), as a collection of
+    /// AST nodes.
+    /// Returns a `ParserError` if any syntactic errors are encountered.
     pub fn parse(&mut self, tokens: VecDeque<Token>) -> Result<Vec<AstNode>, ParserError> {
         let mut tokens = tokens;
         let mut ast = Vec::new();
@@ -188,7 +217,7 @@ impl Parser {
         Ok(ast)
     }
 
-    // Parses the tokens which form expressions in RSLOGO.
+    /// Parses tokens recursively to return valid AST nodes.
     fn expr(&mut self, tokens: &mut VecDeque<Token>) -> Result<AstNode, ParserError> {
         if let Some(token) = tokens.front() {
             match &token.kind {
@@ -222,6 +251,7 @@ impl Parser {
         }
     }
 
+    /// Parses tokens into a MAKE statement node
     fn make_op(&mut self, tokens: &mut VecDeque<Token>) -> Result<AstNode, ParserError> {
         // Consume 'Make' token
         let make_token = tokens
@@ -229,9 +259,7 @@ impl Parser {
             .expect("Token must have been verified to be passed to fn");
 
         // Consume next token
-        let ident_token = tokens
-            .pop_front()
-            .ok_or(ParserError::UnexpectedEnding)?;
+        let ident_token = tokens.pop_front().ok_or(ParserError::UnexpectedEnding)?;
 
         // Verify identifier token
         if TokenKind::IDENT != ident_token.kind {
@@ -264,8 +292,9 @@ impl Parser {
         })
     }
 
-    // A binary expression returns a terminal value (float or bool).
-    // Arithmetic operations, comparison operations and boolean operations.
+    /// Parses tokens into a binary expression node: An arithmetic expression, 
+    /// comparison expression or a boolean expression.
+    /// All binary expressions return a terminal value: a float or a bool.
     fn binary_op(&mut self, tokens: &mut VecDeque<Token>) -> Result<AstNode, ParserError> {
         // Consume the operator token
         let operator_token = tokens
@@ -300,15 +329,17 @@ impl Parser {
             // error here, as they return true for both is_boolean() and is_numeric(). This is intended, as the parser only checks
             // for syntactic errors, while the interpreter will check for semantic errors.
             TokenKind::COMPOP => {
-
-                if !(left.is_boolean() && left.is_numeric() || right.is_boolean() && right.is_numeric()) && (left.is_boolean() != right.is_boolean()
-                        || left.is_numeric() != right.is_numeric() || left.is_word() != right.is_word()) {
+                if !(left.is_boolean() && left.is_numeric())
+                    && !(right.is_boolean() && right.is_numeric())
+                    && (left.is_boolean() != right.is_boolean()
+                        || left.is_numeric() != right.is_numeric()
+                        || left.is_word() != right.is_word())
+                {
                     return Err(ParserError::NonBooleanExpr(
                         operator_token.line.to_string(),
                         operator_token.value.to_string(),
                     ));
                 }
-
             }
             TokenKind::BOOLOP => {
                 if !left.is_boolean() || !right.is_boolean() {
@@ -361,6 +392,7 @@ impl Parser {
         }
     }
 
+    /// Parses a token into a number node.
     fn num(&mut self, tokens: &mut VecDeque<Token>) -> Result<AstNode, ParserError> {
         let num_token = tokens
             .pop_front()
@@ -372,7 +404,7 @@ impl Parser {
             .expect("Num tokens are already verified as parsing to f32 in lexer");
         Ok(AstNode::Num(num_value))
     }
-
+    /// Parses a token into a identifier reference (the value bound a the identifier) node
     fn ident_ref(&mut self, tokens: &mut VecDeque<Token>) -> Result<AstNode, ParserError> {
         let ident_token = tokens
             .pop_front()
@@ -381,7 +413,7 @@ impl Parser {
         let ident_value = ident_token.value;
         Ok(AstNode::IdentRef(ident_value))
     }
-
+    /// Parses tokens into a pen position update node (setx, sety, turn, setheading)
     fn pen_position_update(
         &mut self,
         tokens: &mut VecDeque<Token>,
@@ -392,6 +424,10 @@ impl Parser {
 
         // Parse the arg which was provided to the position setter
         let parsed_value = self.expr(tokens)?;
+
+        // Handle extra arguments
+        check_extra_args(tokens, pos_token.line)
+            .with_context(|| format!("Error parsing '{}' expression", pos_token.value))?;
 
         Ok(AstNode::PenPosUpdate {
             update_type: match pos_token.value.as_str() {
@@ -405,11 +441,15 @@ impl Parser {
             line: pos_token.line,
         })
     }
-
+    /// Parses tokens into a pen status update node (penup / pendown)
     fn pen_status_update(&mut self, tokens: &mut VecDeque<Token>) -> Result<AstNode, ParserError> {
         let status_token = tokens
             .pop_front()
             .expect("Token must have been verified to be passed to fn");
+
+        // Handle extra arguments
+        check_extra_args(tokens, status_token.line)
+            .with_context(|| format!("Error parsing '{}' expression", status_token.value))?;
 
         Ok(AstNode::PenStatusUpdate(
             match status_token.value.as_str() {
@@ -419,7 +459,7 @@ impl Parser {
             },
         ))
     }
-
+    /// Parses tokens into a pen colour update node
     fn pen_color_update(&mut self, tokens: &mut VecDeque<Token>) -> Result<AstNode, ParserError> {
         let col_token = tokens
             .pop_front()
@@ -428,12 +468,16 @@ impl Parser {
         // Parse the arg to the position setter
         let parsed_value = self.expr(tokens)?;
 
+        // Handle extra arguments
+        check_extra_args(tokens, col_token.line)
+            .with_context(|| format!("Error parsing '{}' expression", col_token.value))?;
+
         Ok(AstNode::PenColorUpdate {
             color: Box::new(parsed_value),
             line: col_token.line,
         })
     }
-
+    /// Parses tokens into a query node (xcor, ycor, heading, color)
     fn query(&mut self, tokens: &mut VecDeque<Token>) -> Result<AstNode, ParserError> {
         let query_token = tokens
             .pop_front()
@@ -447,7 +491,7 @@ impl Parser {
             _ => unreachable!("Lexer only produces these binary operators"),
         }))
     }
-
+    /// Parses tokens into an if / while statement node
     fn if_while_statement(&mut self, tokens: &mut VecDeque<Token>) -> Result<AstNode, ParserError> {
         let if_while_token = tokens
             .pop_front()
@@ -536,7 +580,7 @@ impl Parser {
             })
         }
     }
-
+    /// Parses tokens into an addition assignment node
     fn add_assign(&mut self, tokens: &mut VecDeque<Token>) -> Result<AstNode, ParserError> {
         // Consume the operator token
         tokens
@@ -577,7 +621,7 @@ impl Parser {
             line: var_token.line,
         })
     }
-
+    /// Parses tokens into a procedure definition node
     pub fn procedure(&mut self, tokens: &mut VecDeque<Token>) -> Result<AstNode, ParserError> {
         tokens
             .pop_front()
@@ -649,6 +693,7 @@ impl Parser {
         })
     }
 
+    /// Parses tokens into a procedure reference node.
     // When a procedure reference is made, directly bind the provided arguments to the functions
     // parameters.
     pub fn procedure_reference(
@@ -708,6 +753,7 @@ impl Parser {
         })
     }
 
+    /// Parses tokens into a drawing node (forward, back, left, right)
     fn draw_line(&mut self, tokens: &mut VecDeque<Token>) -> Result<AstNode, ParserError> {
         let direction_token = tokens
             .pop_front()
@@ -729,6 +775,10 @@ impl Parser {
             ));
         }
 
+        // Handle extra arguments
+        check_extra_args(tokens, direction_token.line)
+            .with_context(|| format!("Error parsing '{}' expression", direction_token.value))?;
+
         Ok(AstNode::DrawInstruction {
             direction: match direction_token.value.as_str() {
                 "FORWARD" => Direction::FORWARD,
@@ -742,6 +792,7 @@ impl Parser {
         })
     }
 
+    /// Parses a token into a word node (string literal)
     // Unbound variables which are not nested within an expression/statement are treated as raw
     // strings ('words')
     fn raw_string(&mut self, tokens: &mut VecDeque<Token>) -> Result<AstNode, ParserError> {
@@ -752,3 +803,27 @@ impl Parser {
         Ok(AstNode::Word(word.value.to_string()))
     }
 }
+
+/// Returns an error if statement receives more arguments than expected.
+fn check_extra_args(tokens: &mut VecDeque<Token>, line_number: i32) -> Result<(), ParserError> {
+    let mut extra_args = Vec::<String>::new();
+
+    while let Some(token) = tokens.pop_front() {
+        if token.line == line_number {
+            extra_args.push(format!("\"{}\"", token.value));
+        } else {
+            tokens.push_front(token);
+            break;
+        }
+    }
+
+    if extra_args.is_empty() {
+        Ok(())
+    } else {
+        Err(ParserError::ExtraArguments(
+            line_number.to_string(),
+            extra_args.join(", "),
+        ))
+    }
+}
+
