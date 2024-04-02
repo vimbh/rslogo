@@ -28,6 +28,9 @@ pub enum ParserError {
     #[error("Unexpected ending  while parsing program.\n")]
     UnexpectedEnding,
 
+    #[error("[Line {0}]: Excess arguments supplied to expression. Extra arguments: {1}")]
+    ExtraArguments(String, String),
+
     #[error("\t[Line {0}]: Arguments to '{1}' will not return a float. You must provide arguments which return a number\n")]
     NonNumericExpr(String, String),
 
@@ -52,7 +55,7 @@ pub enum ParserError {
     #[error("[Line {0}]: Invalid procedure: Expected END, received: {1}.\n")]
     MissingProcEnd(String, String),
 
-    #[error("[Line{0}]: Invalid procedure reference: {1} does not exist.\n")]
+    #[error("[Line{0}]: Invalid procedurereference: {1} does not exist.\n")]
     InvalidProcReference(String, String),
 }
 
@@ -70,10 +73,10 @@ pub enum InterpreterError {
     #[error("{0}")]
     InterpError(String),
 
-    #[error("[{0}")]
+    #[error("{0}")]
     TypeError(String),
 
-    #[error("{0}")]
+    #[error("Variable {0} does not exist.")]
     InvalidVariableRef(String),
 
     #[error("{0} {1}")]
