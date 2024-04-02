@@ -34,7 +34,8 @@ can be seen in logolang_lib/src/logolang_errors.rs. Additionally for this task, 
 kept attached to the lex and parser stages for error clarity, despite the small overhead it costs.
 For minimising copy, copy during error was not considered as performance is likely not at the forefront
 when the program crashes. The parser and interpreter focused on passing ownership/borrowing references
-to enforce zero copy. A prominent example of copy minimsation can be seen (with explanation) in the 
+to enforce zero copy: for example, the fields in the tokens created by the lexer are handed over to the
+parsing function, which pops each token off the stack and directly places them into a new one, of which the interpreter only needs a reference to. A prominent example of copy minimsation can be seen (with explanation) in the 
 procedure_reference fn in the parser and interpreter, where reference counted variables are used to
 prevent expensive copy operations, and rather using cheap rc copies.
 
@@ -48,7 +49,7 @@ differently now.
 seemed to clutter the code. Implementing custom errors which implement from traits on the other hand
 might have been a more desirable way to declutter and provide more specific error printing. Additionally,
 some functions (such as comp_op, arith_op and bool_op) in the interpreter file likely could have had
-their logic split up in a more cleanly way, but I was trying to bundle them similarly to reduce coat
+their logic split up in a more cleanly way, but I was trying to bundle them similarly to reduce code
 bloat and perhaps ended up lacking clarity, which was not worthile looking back.
 
 ## Other Comments
@@ -56,4 +57,4 @@ bloat and perhaps ended up lacking clarity, which was not worthile looking back.
 If you want to let us know something else about your program, put it here!
 (Feel free to leave this blank)
 
-> TODO
+> I wrote up the languages grammar in in BNF (located in grammar.txt) if you would like to take a look! Comments on this are welcome as I had my doubts about the correctness of it! I kind of wrote it as I went, and only realised deep into the assignment that had I written this out explicitely from the start, a lot of the logic may have been much simpler to deal with :'(
